@@ -1,0 +1,23 @@
+# --- IDE / JetBrains ---
+.idea/
+*.iml
+*.iws
+
+# If you want to keep project config but ignore personal stuff:
+# .idea/*
+# !.idea/codeStyles
+# !.idea/inspectionProfiles
+# Ignore per-user file
+.idea/workspace.xml
+
+# --- OS ---
+.DS_Store
+
+# --- Gradle ---
+.gradle/
+**/build/
+!gradle/wrapper/**
+
+# --- Logs / temp ---
+*.log
+out/

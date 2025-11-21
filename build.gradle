@@ -1,0 +1,118 @@
+plugins {
+    id 'java'
+    id 'org.springframework.boot' version '3.4.9'
+    id 'io.spring.dependency-management' version '1.1.6'
+}
+
+group = 'aero.sita.messaging.mercury'
+version = '1.0.0-SNAPSHOT'
+
+java {
+    sourceCompatibility = '21'
+    targetCompatibility = '21'
+}
+
+configurations {
+    compileOnly { extendsFrom annotationProcessor }
+}
+
+repositories { mavenCentral() }
+
+ext {
+    cucumberVersion = '7.18.0'
+    lombokVersion   = '1.18.36'
+}
+
+dependencies {
+    implementation 'org.springframework.boot:spring-boot-starter'
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-data-mongodb'
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+
+    compileOnly "org.projectlombok:lombok:${lombokVersion}"
+    annotationProcessor "org.projectlombok:lombok:${lombokVersion}"
+    testCompileOnly "org.projectlombok:lombok:${lombokVersion}"
+    testAnnotationProcessor "org.projectlombok:lombok:${lombokVersion}"
+
+    testImplementation 'org.junit.jupiter:junit-jupiter-api'
+    testImplementation 'org.junit.jupiter:junit-jupiter-engine'
+    testImplementation 'org.junit.platform:junit-platform-suite'
+
+    testImplementation "io.cucumber:cucumber-java:${cucumberVersion}"
+    testImplementation "io.cucumber:cucumber-spring:${cucumberVersion}"
+    testImplementation "io.cucumber:cucumber-junit-platform-engine:${cucumberVersion}"
+
+    implementation 'com.fasterxml.jackson.core:jackson-databind'
+    implementation 'org.apache.commons:commons-lang3'
+    implementation 'org.mongodb:mongodb-driver-sync'
+    implementation 'org.awaitility:awaitility:4.2.0'
+}
+
+/**
+ * Global test config:
+ * - JUnit Platform
+ * - Long naming strategy
+ * - Optional tag filtering via -Pcucumber.filter.tags
+ * - Timestamped Cucumber reports (html/json/junit) with yyyyMMdd_HHmmss (HHmmss = hh24miss)
+ */
+tasks.withType(Test).configureEach {
+    useJUnitPlatform()
+
+    systemProperty 'cucumber.junit-platform.naming-strategy', 'long'
+    systemProperty 'cucumber.publish.quiet', 'true'
+
+    if (project.hasProperty('cucumber.filter.tags')) {
+        systemProperty 'cucumber.filter.tags', project.property('cucumber.filter.tags')
+    }
+
+    // Inject dynamic, timestamped report filenames at execution time
+    doFirst {
+        if (!systemProperties.containsKey('cucumber.plugin')) {
+            def ts = new Date().format('yyyyMMdd_HHmmss') // HHmmss = hh24miss
+            def reportsDir = layout.buildDirectory.dir("reports").get().asFile
+            def html  = "html:${new File(reportsDir, "cucumber_${ts}.html").path}"
+            def json  = "json:${new File(reportsDir, "cucumber_${ts}.json").path}"
+            def junit = "junit:${new File(reportsDir, "cucumber_${ts}.xml").path}"
+            systemProperty 'cucumber.plugin', "pretty, ${html}, ${json}, ${junit}"
+        }
+    }
+
+    testLogging {
+        // you can do list:
+        events = ["passed", "skipped", "failed"]
+
+        // this is the line Gradle complained about:
+        exceptionFormat = "full"
+
+        showStandardStreams = false
+    }
+
+}
+
+// --- Dedicated tasks, each bound to ONE runner class to avoid duplicate executions ---
+
+tasks.register('smokeTest', Test) {
+    useJUnitPlatform()
+    systemProperty 'cucumber.filter.tags', '@smoke'
+    include '**/SmokeTestRunner.class'           // only this runner is discovered
+}
+
+tasks.register('regressionTest', Test) {
+    useJUnitPlatform()
+    systemProperty 'cucumber.filter.tags', '@regression'
+    include '**/RegressionTestRunner.class'
+}
+
+tasks.register('allTests', Test) {
+    useJUnitPlatform()
+    include '**/AllTestsRunner.class'
+}
+
+tasks.named('test', Test) {
+    useJUnitPlatform()
+    include '**/AllTestsRunner.class'            // default “test” runs only the all suite
+}
+
+// Build only a plain JAR (disable Spring Boot fat jar)
+tasks.named('bootJar') { enabled = false }
+tasks.named('jar')     { enabled = true }
