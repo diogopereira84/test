@@ -197,17 +197,11 @@ public class MessageVerificationSteps {
       List<String> actualErrors,
       RejectMessageBody parsedMessage) {
 
-    StringBuilder sb = new StringBuilder();
-    sb.append("\n");
-    sb.append("Reject message error count mismatch\n");
-    sb.append("\n");
-    sb.append(String.format("Expected %d error(s): %s\n", expectedErrors.size(), expectedErrors));
-    sb.append(String.format("Actual %d error(s): %s\n", actualErrors.size(), actualErrors));
-    sb.append("\n");
-    sb.append("Complete reject message structure:\n");
-    sb.append(parsedMessage.toFormattedString());
+    String sb = "\n" + "Reject message error count mismatch\n" + "\n" + String.format("Expected %d error(s): %s\n", expectedErrors.size(), expectedErrors) +
+        String.format("Actual %d error(s): %s\n", actualErrors.size(), actualErrors) + "\n" + "Complete reject message structure:\n" +
+        parsedMessage.toFormattedString();
 
-    return sb.toString();
+    return sb;
   }
 
   /**
@@ -218,17 +212,16 @@ public class MessageVerificationSteps {
       List<String> actualErrors,
       RejectMessageBody parsedMessage) {
 
-    StringBuilder sb = new StringBuilder();
-    sb.append("\n");
-    sb.append(String.format("Expected error '%s' not found in reject message\n", expectedError));
-    sb.append("\n");
-    sb.append(String.format("Expected error: %s\n", expectedError));
-    sb.append(String.format("Actual errors: %s\n", actualErrors));
-    sb.append("\n");
-    sb.append("Complete reject message structure:\n");
-    sb.append(parsedMessage.toFormattedString());
+    String sb = "\n" +
+        String.format("Expected error '%s' not found in reject message\n", expectedError) +
+        "\n" +
+        String.format("Expected error: %s\n", expectedError) +
+        String.format("Actual errors: %s\n", actualErrors) +
+        "\n" +
+        "Complete reject message structure:\n" +
+        parsedMessage.toFormattedString();
 
-    return sb.toString();
+    return sb;
   }
 
   /**

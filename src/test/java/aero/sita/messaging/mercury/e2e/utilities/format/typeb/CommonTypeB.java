@@ -38,6 +38,20 @@ public class CommonTypeB {
   private String messageIdentity;
   private String firstAddressOverrideRaw;
 
+  public static String visualize(String s) {
+    if (s == null) {
+      return "<null>";
+    }
+    return s.replace(ControlChars.CRLF, "\\r\\n")
+        .replace("\u0001", "<SOH>").replace("\u0002", "<STX>").replace("\u0003", "<ETX>")
+        .replace("\u001A", "<SUB>")
+        .replace("\u001F", "<US>");
+  }
+
+  public static String escaped(String s) throws JsonProcessingException {
+    return new ObjectMapper().writeValueAsString(s);
+  }
+
   public CommonTypeB reset() {
     soa = SoaPattern.CRLF_SOH;
     eoa = TypeBMessageBuilder.AddressEoaToken.DOT;
@@ -72,9 +86,8 @@ public class CommonTypeB {
     return this;
   }
 
-  public CommonTypeB withEoa(String tokenOrSeq) {
+  public void withEoa(String tokenOrSeq) {
     this.eoa = TypeBMessageBuilder.AddressEoaToken.parse(tokenOrSeq);
-    return this;
   }
 
   public CommonTypeB emitTextDelimiters(boolean on) {
@@ -87,24 +100,20 @@ public class CommonTypeB {
     return this;
   }
 
-  public CommonTypeB withHeading(String h) {
+  public void withHeading(String h) {
     this.heading = h;
-    return this;
   }
 
-  public CommonTypeB withHeadingPrefix(String p) {
+  public void withHeadingPrefix(String p) {
     this.headingPrefix = p;
-    return this;
   }
 
-  public CommonTypeB withHeadingTerminator(String t) {
+  public void withHeadingTerminator(String t) {
     this.headingTerminator = t;
-    return this;
   }
 
-  public CommonTypeB withDiversionRoutingIndicator(String ri7) {
+  public void withDiversionRoutingIndicator(String ri7) {
     this.diversionRoutingIndicator = (ri7 == null ? null : ri7.trim());
-    return this;
   }
 
   public CommonTypeB withPilot(String line) {
@@ -114,11 +123,10 @@ public class CommonTypeB {
     return this;
   }
 
-  public CommonTypeB withAddressLine(String line) {
+  public void withAddressLine(String line) {
     if (line != null) {
       addresses.add(new AddressEntry(AddressEntry.Kind.ADDRESS, line));
     }
-    return this;
   }
 
   public CommonTypeB withOriginatorIndicator(String oi) {
@@ -126,21 +134,18 @@ public class CommonTypeB {
     return this;
   }
 
-  public CommonTypeB withDoubleSignature(String ds) {
+  public void withDoubleSignature(String ds) {
     this.doubleSignature = (ds == null || ds.isBlank()) ? null : ds.trim();
-    return this;
   }
 
-  public CommonTypeB withMessageIdentity(String mi) {
+  public void withMessageIdentity(String mi) {
     this.messageIdentity = (mi == null || mi.isBlank()) ? null : mi;
-    return this;
   }
 
-  public CommonTypeB withTextLine(String t) {
+  public void withTextLine(String t) {
     if (t != null) {
       textLines.add(t);
     }
-    return this;
   }
 
   public CommonTypeB withAddressOverrideRaw(String raw) {
@@ -149,12 +154,16 @@ public class CommonTypeB {
   }
 
   public CommonTypeB addPreTextRaw(String raw) {
-    if (raw != null) preTextRaw.add(raw);
+    if (raw != null) {
+      preTextRaw.add(raw);
+    }
     return this;
   }
 
   public CommonTypeB addPostTextRaw(String raw) {
-    if (raw != null) postTextRaw.add(raw);
+    if (raw != null) {
+      postTextRaw.add(raw);
+    }
     return this;
   }
 
@@ -202,30 +211,8 @@ public class CommonTypeB {
     return out;
   }
 
-  public static String visualize(String s) {
-    if (s == null) return "<null>";
-    return s.replace(ControlChars.CRLF, "\\r\\n")
-        .replace("\u0001", "<SOH>").replace("\u0002", "<STX>").replace("\u0003", "<ETX>")
-        .replace("\u001A", "<SUB>")
-        .replace("\u001F", "<US>");
-  }
+  private record AddressEntry(CommonTypeB.AddressEntry.Kind kind, String line) {
 
-  public static String escaped(String s) throws JsonProcessingException {
-    return new ObjectMapper().writeValueAsString(s);
-  }
-
-  public String escaped() {
-    return visualize(compose());
-  }
-
-  public String escapedJson() throws JsonProcessingException {
-    return escaped(compose());
-  }
-
-  private static final class AddressEntry {
-    final Kind kind;
-    final String line;
-    AddressEntry(Kind kind, String line) { this.kind = kind; this.line = line; }
     enum Kind { PILOT, ADDRESS }
   }
 }

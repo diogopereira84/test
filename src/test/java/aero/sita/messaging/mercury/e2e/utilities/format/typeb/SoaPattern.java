@@ -40,16 +40,12 @@ public enum SoaPattern {
       return CRLF_DOT;
     }
     String n = value.trim().replace(' ', '+').replace('_', '+').toUpperCase();
-    if (n.equals("CRLF+SOH") || n.equals("SOH")) {
-      return CRLF_SOH;
-    }
-    if (n.equals("CRLF+SUB") || n.equals("SUB")) {
-      return CRLF_SUB;
-    }
-    if (n.equals("CRLF+DOT") || n.equals("DOT") || n.equals("CRLF+.")) {
-      return CRLF_DOT;
-    }
-    return DEFAULT;
+    return switch (n) {
+      case "CRLF+SOH", "SOH" -> CRLF_SOH;
+      case "CRLF+SUB", "SUB" -> CRLF_SUB;
+      case "CRLF+DOT", "DOT", "CRLF+." -> CRLF_DOT;
+      default -> DEFAULT;
+    };
   }
 
   public static SoaPattern detectIn(String text) {

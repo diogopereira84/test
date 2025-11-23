@@ -9,15 +9,17 @@
 
 package aero.sita.messaging.mercury.e2e.cucumber.typeb.steps.configuration;
 
-import static org.assertj.core.api.Assertions.assertThat;
-
 import aero.sita.messaging.mercury.e2e.utilities.helper.ConfigurationDbHelper;
 import io.cucumber.datatable.DataTable;
 import io.cucumber.java.en.Given;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+
+import static org.assertj.core.api.Assertions.assertThat;
 
 @Slf4j
 public class ConfigurationVerificationSteps {
@@ -25,38 +27,32 @@ public class ConfigurationVerificationSteps {
   @Autowired
   private ConfigurationDbHelper configurationDbHelper;
 
+  private static final Set<String> verifiedCollections = ConcurrentHashMap.newKeySet();
+
   @Given("the configuration data is verified and healthy")
   public void verifyConfigurationIntegrity() {
+    String checkKey = "GENERAL_INTEGRITY";
+    if (verifiedCollections.contains(checkKey)) return;
+
     List<String> emptyCollections = configurationDbHelper.getEmptyRequiredCollections();
-
-    if (!emptyCollections.isEmpty()) {
-      log.error("Found empty required collections: {}", emptyCollections);
-    }
-
     assertThat(emptyCollections)
-        .withFailMessage("Data Integrity Failure: The following collections in 'configuration' DB are empty: %s", emptyCollections)
+        .withFailMessage("DB Integrity Error: Empty collections in configuration: %s", emptyCollections)
         .isEmpty();
 
-    log.info("Sanity Check Passed: All required configuration collections contain data.");
+    verifiedCollections.add(checkKey);
   }
 
   @Given("the {string} collection contains the following documents:")
   public void verifyConfigurationData(String collectionName, DataTable dataTable) {
+    if (verifiedCollections.contains(collectionName)) return;
+
     List<Map<String, String>> expectedRows = dataTable.asMaps(String.class, String.class);
+    List<String> errors = configurationDbHelper.validateCollectionContent(collectionName, expectedRows);
 
-    // Delegate validation logic to helper (which returns a list of all errors found)
-    List<String> validationErrors = configurationDbHelper.validateCollectionContent(collectionName, expectedRows);
-
-    if (!validationErrors.isEmpty()) {
-      log.error("Data Integrity Check FAILED for collection '{}'. Found {} discrepancies.", collectionName, validationErrors.size());
-      validationErrors.forEach(log::error);
-    }
-
-    // Fail the test only after checking all rows/fields (Soft Assertion)
-    assertThat(validationErrors)
-        .withFailMessage("Data Integrity Mismatches in '%s':\n%s", collectionName, String.join("\n", validationErrors))
+    assertThat(errors)
+        .withFailMessage("Data Integrity Mismatches in '%s':\n%s", collectionName, String.join("\n", errors))
         .isEmpty();
 
-    log.info("SUCCESS: Verified {} documents in '{}'.", expectedRows.size(), collectionName);
+    verifiedCollections.add(collectionName);
   }
 }

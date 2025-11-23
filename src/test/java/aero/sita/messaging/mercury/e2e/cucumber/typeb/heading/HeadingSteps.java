@@ -11,10 +11,8 @@ package aero.sita.messaging.mercury.e2e.cucumber.typeb.heading;
 
 import aero.sita.messaging.mercury.e2e.cucumber.typeb.common.CommonTypeBWorld;
 import aero.sita.messaging.mercury.e2e.utilities.format.typeb.ControlChars;
-import com.fasterxml.jackson.core.JsonProcessingException;
 import io.cucumber.java.en.Given;
 import io.cucumber.java.en.Then;
-import io.cucumber.java.en.When;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -25,19 +23,6 @@ public class HeadingSteps {
 
   public HeadingSteps(CommonTypeBWorld world) {
     this.common = world;
-  }
-
-  @Given("connection setting {string} is {string}")
-  public void connectionSettingIs(String setting, String value) {
-    boolean isEnabled = Boolean.parseBoolean(value);
-    if ("acceptHeading".equals(setting)) {
-      LOG.info("[CONFIG] Connection setting 'acceptHeading' set to: {}", isEnabled);
-    }
-  }
-
-  @Given("connection setting {string} is true")
-  public void connectionSettingIsTrue(String setting) {
-    connectionSettingIs(setting, "true");
   }
 
   @Given("the message {string} contains SOA")
@@ -56,74 +41,47 @@ public class HeadingSteps {
     messageContainsSOA(shape);
   }
 
-  @When("I set the content immediately preceding the SOA to {string}")
+  @Given("I set the content immediately preceding the SOA to {string}")
   public void preSoaContentIs(String contentType) {
     String content = "";
-    String terminator = "";
 
-    switch (contentType) {
-      case "AddressEndIndicator":
-        // Requirement: EOA is CRLF + DOT.
-        content = ControlChars.CRLF + ControlChars.DOT;
-        break;
-
-      case "PilotSignal":
-        content = "QJQJ";
-        break;
-
-      case "GENERIC HEADING TEXT":
-        content = "GENERIC HEADING TEXT";
-        break;
-
-      case "(n/a)":
-      case "":
-        content = "";
-        break;
-
-      default:
-        content = contentType;
-    }
+    content = switch (contentType) {
+      case "AddressEndIndicator" -> ControlChars.CRLF + ControlChars.DOT;
+      case "PilotSignal" -> "/////";
+      case "GENERIC HEADING TEXT" -> "GENERIC HEADING TEXT";
+      case "" -> "";
+      default -> contentType;
+    };
 
     common.ctx.withHeading(content);
-    if (!terminator.isEmpty()) {
-      common.ctx.withHeadingTerminator(terminator);
-    }
-
-    LOG.debug("Set pre-SOA content (visual): {}",
-        content.replace("\r", "\\r").replace("\n", "\\n"));
+    LOG.debug("Set pre-SOA content: {}", content.replace("\r", "\\r").replace("\n", "\\n"));
   }
 
   @Given("I set heading {string}")
   public void setRawHeading(String headingContent) {
     common.ctx.withHeading(headingContent);
-    LOG.debug("Set Heading: {}", headingContent);
   }
 
   @Given("I set heading prefix {string} and content {string}")
   public void setHeadingPrefixAndContent(String prefix, String content) {
     common.ctx.withHeadingPrefix(prefix);
     common.ctx.withHeading(content);
-    LOG.debug("Set Heading with prefix '{}' and content '{}'", prefix, content);
   }
 
   @Given("I set heading with internal line break: {string} + CRLF + {string}")
   public void setHeadingWithInternalLineBreak(String line1, String line2) {
     String multiLineHeading = line1 + ControlChars.CRLF + line2;
     common.ctx.withHeading(multiLineHeading);
-    LOG.debug("Set Multi-line Heading: {}", multiLineHeading.replace("\r", "\\r").replace("\n", "\\n"));
   }
 
   @Given("pre-SOA is a Standard Heading with serial {string} and supplemental {string}")
   public void preSoaIsStandardHeading(String serial, String supplemental) {
     StringBuilder sb = new StringBuilder();
     sb.append(serial);
-
     if (supplemental != null && !supplemental.isEmpty() && !"SOA".equals(supplemental)) {
       sb.append(" ").append(supplemental);
     }
-
     common.ctx.withHeading(sb.toString());
-    LOG.debug("Set Standard Heading: {}", sb);
   }
 
   @Given("pre-SOA is a Standard Heading with valid serial and supplemental {string}")
@@ -140,22 +98,18 @@ public class HeadingSteps {
   public void preSoaIsSuidHeading(String indicator, String msgId, String txnId) {
     String content = String.format("%s %s %s", indicator, msgId, txnId);
     common.ctx.withHeading(content);
-    LOG.debug("Set SUID Heading: {}", content);
   }
 
   @Given("pre-SOA is {string} where original type is {string}")
   public void preSoaIsSuidPlusOriginal(String scenario, String originalType) {
     String suidPart = "SUID 1111-2222 3333-4444";
     String originalPart = "";
-
     if ("standard".equalsIgnoreCase(originalType)) {
       originalPart = "123 SUPP";
     } else if ("custom".equalsIgnoreCase(originalType)) {
       originalPart = "CUSTOM123456";
     }
-
     common.ctx.withHeading(suidPart + " " + originalPart);
-    LOG.debug("Set SUID+Original Heading: {}", originalPart);
   }
 
   @Given("pre-SOA begins with {string} followed by a valid Standard Heading")
@@ -163,7 +117,6 @@ public class HeadingSteps {
     String cleanPrefix = prefix.replace("\"", "");
     common.ctx.withHeadingPrefix(cleanPrefix);
     common.ctx.withHeading("001 TEST");
-    LOG.debug("Set Heading Prefix: '{}'", cleanPrefix);
   }
 
   @Given("pre-SOA contains a heading spanning {string} lines")
@@ -177,7 +130,6 @@ public class HeadingSteps {
       }
     }
     common.ctx.withHeading(sb.toString());
-    LOG.debug("Set Multi-line Heading ({} lines)", lines);
   }
 
   @Given("pre-SOA is a Custom Heading with extremely long content of length {string}")
@@ -185,7 +137,6 @@ public class HeadingSteps {
     int length = Integer.parseInt(lengthStr);
     String longText = "A".repeat(length);
     common.ctx.withHeading(longText);
-    LOG.debug("Set Long Heading (length {})", length);
   }
 
   @Given("the heading terminator is {string}")
@@ -195,22 +146,6 @@ public class HeadingSteps {
     } else if ("SOA".equals(terminatorType)) {
       common.ctx.withHeadingTerminator("");
     }
-    LOG.debug("Set Heading Terminator: {}", terminatorType);
-  }
-
-  // --- Verification Steps ---
-
-  @When("the message is evaluated")
-  public void messageIsEvaluated() throws JsonProcessingException {
-    common.output = common.ctx.compose();
-
-    String visual = common.escaped();
-    String plaintext = common.escapedJson();
-
-    LOG.info("----------------------------------------------------------------");
-    LOG.info("Message Constructed for Evaluation (Visual): {}", visual);
-    LOG.info("Message Constructed for Evaluation (Plaintext): {}", plaintext);
-    LOG.info("----------------------------------------------------------------");
   }
 
   @Then("the heading detection result is {string}")

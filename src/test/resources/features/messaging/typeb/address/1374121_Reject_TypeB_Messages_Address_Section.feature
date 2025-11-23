@@ -19,7 +19,7 @@ Feature: Type-B Address Section parsing & validation (Req 1374121)
     And <nalStep>
     And I set originator "LKYSOLT" and identity "3456700"
     And I add text line "Test-UAT"
-    And I finalize the composed message
+    And the message is composed
     When I send the composed message via the Test Harness
     Then the Address Section is detected
     And <pilotThen>
@@ -42,7 +42,7 @@ Feature: Type-B Address Section parsing & validation (Req 1374121)
     And I add pilot address line "<pilot>" with pilot signal "/////"
     And I set originator "LKYSOLT" and identity "3456700"
     And I add text line "Test-UAT"
-    And I finalize the composed message
+    And the message is composed
     When I send the composed message via the Test Harness
     Then the message is rejected with reason "INVALID PILOT ADDRESS LINE"
 
@@ -57,7 +57,7 @@ Feature: Type-B Address Section parsing & validation (Req 1374121)
     And I add address line "<priority> <riList>"
     And I set originator "LKYSOLT" and identity "3456700"
     And I add text line "Test-UAT"
-    And I finalize the composed message
+    And the message is composed
     When I send the composed message via the Test Harness
     Then the Address Section is detected
     And the message is accepted
@@ -82,7 +82,7 @@ Feature: Type-B Address Section parsing & validation (Req 1374121)
       # NAL last
     And I set originator "LKYSOLT" and identity "3456700"
     And I add text line "Test-UAT"
-    And I finalize the composed message
+    And the message is composed
     When I send the composed message via the Test Harness
     Then the Address Section is detected
     And zero Pilot elements are detected
@@ -95,7 +95,7 @@ Feature: Type-B Address Section parsing & validation (Req 1374121)
     And I add address line "<priority> SWIRI1G"
     And I set originator "LKYSOLT" and identity "3456700"
     And I add text line "Test-UAT"
-    And I finalize the composed message
+    And the message is composed
     When I send the composed message via the Test Harness
     Then the message is accepted
     And the priority is "<expected>"
@@ -129,7 +129,7 @@ Feature: Type-B Address Section parsing & validation (Req 1374121)
     Given I craft a raw message with an address element followed by stray text "XYZ" between EOA and the next SOA
     And I set originator "LKYSOLT" and identity "3456700"
     And I add text line "Test-UAT"
-    And I finalize the composed message
+    And the message is composed
     When I send the composed message via the Test Harness
     Then the message is rejected with reason "INVALID ADDRESS SECTION"
 
@@ -142,7 +142,8 @@ Feature: Type-B Address Section parsing & validation (Req 1374121)
       # NAL last
     And I set originator "LKYSOLT" and identity "3456700"
     And I add text line "Test-UAT"
-    And I finalize the composed message
+    And the message is composed
+    When I send the composed message via the Test Harness
     Then the message is rejected with reason "TOO MANY PILOT ADDRESS LINE"
 
   @negative
@@ -153,7 +154,7 @@ Feature: Type-B Address Section parsing & validation (Req 1374121)
       # NAL last (to allow parsing)
     And I set originator "LKYSOLT" and identity "3456700"
     And I add text line "Test-UAT"
-    And I finalize the composed message
+    And the message is composed
     When I send the composed message via the Test Harness
     Then the message is rejected with reason "PILOT ADDRESS LINE - TOO MANY ADDRESSES"
 
@@ -164,7 +165,7 @@ Feature: Type-B Address Section parsing & validation (Req 1374121)
       # NAL
     And I set originator "LKYSOLT" and identity "3456700"
     And I add text line "Test-UAT"
-    And I finalize the composed message
+    And the message is composed
     When I send the composed message via the Test Harness
     Then the message is rejected with reason "INVALID ROUTING INDICATOR ADDRESS - <badToken>"
 
@@ -181,7 +182,7 @@ Feature: Type-B Address Section parsing & validation (Req 1374121)
     And I add address line "QN AAAAAAA BBBBBBB CCCCCCC DDDDDDD EEEEEEE FFFFFFF GGGGGGG HHHHHHH IIIIIII"
     And I set originator "LKYSOLT" and identity "3456700"
     And I add text line "Test-UAT"
-    And I finalize the composed message
+    And the message is composed
     When I send the composed message via the Test Harness
     Then the message is rejected with reason "TOO MANY ADDRESSESS PER LINE"
 
@@ -195,7 +196,7 @@ Feature: Type-B Address Section parsing & validation (Req 1374121)
     And I add address line "AAAAAAA BBBBBBB"
     And I set originator "LKYSOLT" and identity "3456700"
     And I add text line "Test-UAT"
-    And I finalize the composed message
+    And the message is composed
     When I send the composed message via the Test Harness
     Then the message is rejected with reason "TOO MANY ADDRESS LINES"
 
@@ -206,7 +207,7 @@ Feature: Type-B Address Section parsing & validation (Req 1374121)
     And I add address line "QD SWIRI1G"
     And I set originator "LKYSOLT" and identity "3456700"
     And I add text line "FSU/15"
-    And I finalize the composed message
+    And the message is composed
     When I send the composed message via the Test Harness
     Then the Address Section is detected
 
@@ -221,7 +222,7 @@ Feature: Type-B Address Section parsing & validation (Req 1374121)
     And I append the correct EOA for the element
     And I set originator "LKYSOLT" and identity "3456700"
     And I add text line "FSU/15"
-    And I finalize the composed message
+    And the message is composed
     When I send the composed message via the Test Harness
     Then the Address Section is detected
     And the message is accepted
@@ -232,7 +233,7 @@ Feature: Type-B Address Section parsing & validation (Req 1374121)
     And I add address line "qn swiri1g lkyeglt"
     And I set originator "LKYSOLT" and identity "3456700"
     And I add text line "FSU/15"
-    And I finalize the composed message
+    And the message is composed
     When I send the composed message via the Test Harness
     Then the list of recipients extracted equals "SWIRI1G LKYEGLT"
     And the message is accepted
@@ -245,7 +246,7 @@ Feature: Type-B Address Section parsing & validation (Req 1374121)
     Given I craft a raw message with heading "719" and first address element "QD MSPFMPO BRUACER" without SOA and with EOA "DOT"
     And I set originator "LKYSOLT" and identity "3456700"
     And I add text line "FSU/15"
-    And I finalize the composed message
+    And the message is composed
     When I send the composed message via the Test Harness
     Then the message is rejected with reason "ADDRESS SECTION NOT FOUND"
 
@@ -255,7 +256,7 @@ Feature: Type-B Address Section parsing & validation (Req 1374121)
     And I add address line "QD SWIRI1G ASAFX"
     And I set originator "LKYSOLT" and identity "3456700"
     And I add text line "FSU/15"
-    And I finalize the composed message
+    And the message is composed
     When I send the composed message via the Test Harness
     Then the message is rejected with reason "INVALID ROUTING INDICATOR ADDRESS - ASAFX"
     And the list of recipients extracted equals "SWIRI1G"

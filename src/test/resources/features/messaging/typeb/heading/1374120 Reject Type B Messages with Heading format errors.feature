@@ -7,38 +7,24 @@ Feature: Type-B Heading Section handling in Mercury
 
   Background:
     # --- DATA INTEGRITY CHECK ---
-    # Ensure the configuration database has the required routing data
     Given the "configuration.hosts" collection contains the following documents:
       | _id     | type  | name    | enabled |
       | server1 | IBMMQ | server1 | true    |
 
     And the "configuration.connections" collection contains the following documents:
-      | _id         | type  | name         | serviceAddress | format | hostId  | inQueue        | outQueue      | messageConfiguration.acceptMessagesWithAHeadingSection | enabled |
-      | connectionA | IBMMQ | connectionA  | LETTTLK        | TYPE_B | server1 | LETTTLK.OUT    | LETTTLK.IN    | true                                                   | true    |
-      | connectionB | IBMMQ | connectionB  | LETRRLK        | TYPE_B | server1 | LETRRLK.OUT    | LETRRLK.IN    | true                                                   | true    |
-      | connectionC | IBMMQ | connectionC  | LETVVLK        | TYPE_B | server1 | LETVVLK.OUT    | LETVVLK.IN    | false                                                  | true    |
-      | connectionD | IBMMQ | connectionD  | LETCCLK        | TYPE_B | server1 | LETCCLK.OUT    | LETCCLK.IN    | false                                                  | true    |
+      | _id         | type  | name         | serviceAddress | format | hostId  | inQueue        | outQueue       | messageConfiguration.acceptMessagesWithAHeadingSection | enabled |
+      | connectionA | IBMMQ | connectionA  | LETTTLK        | TYPE_B | server1 | LETTTLK.OUT    | LETTTLK.IN     | true                                                   | true    |
+      | connectionC | IBMMQ | connectionC  | LETVVLK        | TYPE_B | server1 | LETVVLK.OUT    | LETVVLK.IN     | false                                                  | true    |
 
     And the "configuration.destinations" collection contains the following documents:
       | _id          | connectionIds[] | enabled |
       | destinationA | connectionA     | true    |
-      | destinationB | connectionB     | true    |
       | destinationC | connectionC     | true    |
-      | destinationD | connectionD     | true    |
 
     And the "configuration.routes" collection contains the following documents:
       | _id | type   | criteria.addressMatcher | criteria.type | destinationIds[] | enabled |
       | 175 | DIRECT | JFKNYBA                 | DISCRETE      | destinationA     | true    |
-      | 176 | DIRECT | CDGFRAF                 | DISCRETE      | destinationB     | true    |
       | 177 | DIRECT | SINSGSQ                 | DISCRETE      | destinationC     | true    |
-      | 178 | DIRECT | FRADELH                 | DISCRETE      | destinationD     | true    |
-
-    And the "configuration.routing-indicators" collection contains the following documents:
-      | _id     | type     | locationIdentifier | departmentCode | airlineCode |
-      | JFKNYBA | DISCRETE | JFK                | NY             | BA          |
-      | CDGFRAF | DISCRETE | CDG                | FR             | AF          |
-      | SINSGSQ | DISCRETE | SIN                | SG             | SQ          |
-      | FRADELH | DISCRETE | FRA                | DE             | LH          |
 
     # --- TEST SETUP ---
     Given a clean TypeBComposer
@@ -46,48 +32,48 @@ Feature: Type-B Heading Section handling in Mercury
     And I add text line "Standard UAT Body Text"
 
   # ==============================================================================
-  # GROUP 1: Heading Support DISABLED (acceptHeading = false)
+  # GROUP 1: Heading Support DISABLED (Target: SINSGSQ -> Disabled)
   # ==============================================================================
 
   @config-disabled @edge @positive
   Scenario Outline: [DISABLED] Accept message when no actual heading content precedes SOA
-    Given connection setting "acceptHeading" is "false"
-    When I set the content immediately preceding the SOA to <preSoaContent>
-    And I add address line "QN SWIRI1G"
-    And I finalize the composed message
-    When the message is evaluated
+    # SINSGSQ routes to ConnectionC (Heading Disabled)
+    Given the message "<hasSOA>" contains SOA
+    And I set the content immediately preceding the SOA to "<preSoaContent>"
+    And I add address line "QN SINSGSQ"
+    And the message is composed
+    When I send the composed message via the Test Harness
     Then the overall disposition is "accepted"
     And the heading detection result is "none"
 
     Examples:
-      | description           | preSoaContent         |
-      | Empty (SOA is first)  | ""                    |
-      | EOA token preceding   | "AddressEndIndicator" |
-      | Pilot Signal preceding| "PilotSignal"         |
+      | hasSOA | preSoaContent         |
+      | no     |                       |
+      | yes    | AddressEndIndicator   |
+      | yes    | PilotSignal           |
 
   @config-disabled @negative
   Scenario: [DISABLED] Reject message when actual text content precedes SOA
-    Given connection setting "acceptHeading" is "false"
-    And the message "yes" contains SOA
-    When I set the content immediately preceding the SOA to "GENERIC HEADING TEXT"
-    And I add address line "QN SWIRI1G"
-    And I finalize the composed message
-    When the message is evaluated
+    Given the message "yes" contains SOA
+    And I set the content immediately preceding the SOA to "GENERIC HEADING TEXT"
+    And I add address line "QN SINSGSQ"
+    And the message is composed
+    When I send the composed message via the Test Harness
     Then the overall disposition is "rejected"
     And the reason is "HEADING SECTION NOT ALLOWED"
 
   # ==============================================================================
-  # GROUP 2: Heading Support ENABLED - Prefixes and Forwarding
+  # GROUP 2: Heading Support ENABLED (Target: JFKNYBA -> Enabled)
   # ==============================================================================
 
   @config-enabled @preservation @positive
   Scenario Outline: [ENABLED] Ignore prefixes for parsing but preserve for forwarding
-    Given connection setting "acceptHeading" is "true"
-    And the message "yes" contains SOA
+    # JFKNYBA routes to ConnectionA (Heading Enabled)
+    Given the message "yes" contains SOA
     And I set heading prefix <prefix> and content "001 VALID"
-    And I add address line "QN SWIRI1G"
-    And I finalize the composed message
-    When the message is evaluated
+    And I add address line "QN JFKNYBA"
+    And the message is composed
+    When I send the composed message via the Test Harness
     Then the overall disposition is "accepted"
     And the parsed heading type is "standard"
     And the forwarded heading retains the original <prefix>
@@ -100,12 +86,11 @@ Feature: Type-B Heading Section handling in Mercury
 
   @config-enabled @parsing @standard @positive
   Scenario Outline: [ENABLED] Accept valid Standard Heading formats
-    Given connection setting "acceptHeading" is "true"
-    And the message "yes" contains SOA
+    Given the message "yes" contains SOA
     And I set heading "<headingContent>"
-    And I add address line "QN SWIRI1G"
-    And I finalize the composed message
-    When the message is evaluated
+    And I add address line "QN JFKNYBA"
+    And the message is composed
+    When I send the composed message via the Test Harness
     Then the overall disposition is "accepted"
     And the parsed heading type is "standard"
     And the parsed serial is "<expectedSerial>"
@@ -118,24 +103,22 @@ Feature: Type-B Heading Section handling in Mercury
 
   @config-enabled @parsing @suid @positive
   Scenario: [ENABLED] Accept valid SUID Heading format
-    Given connection setting "acceptHeading" is "true"
-    And the message "yes" contains SOA
+    Given the message "yes" contains SOA
     And I set heading "SUID 6F1E2D3C-1111-2222 3333-444455556666"
-    And I add address line "QN SWIRI1G"
-    And I finalize the composed message
-    When the message is evaluated
+    And I add address line "QN JFKNYBA"
+    And the message is composed
+    When I send the composed message via the Test Harness
     Then the overall disposition is "accepted"
     And the parsed heading type is "suid"
     And the SUID fields are captured without decoding
 
   @config-enabled @parsing @custom @edge @positive
   Scenario Outline: [ENABLED] Accept single-line Custom Heading formats
-    Given connection setting "acceptHeading" is "true"
-    And the message "yes" contains SOA
+    Given the message "yes" contains SOA
     And I set heading "<headingContent>"
-    And I add address line "QN SWIRI1G"
-    And I finalize the composed message
-    When the message is evaluated
+    And I add address line "QN JFKNYBA"
+    And the message is composed
+    When I send the composed message via the Test Harness
     Then the overall disposition is "accepted"
     And the parsed heading type is "custom"
 
@@ -151,12 +134,11 @@ Feature: Type-B Heading Section handling in Mercury
 
   @config-enabled @validation @negative
   Scenario Outline: [ENABLED] Reject Multi-line headings
-    Given connection setting "acceptHeading" is "true"
-    And the message "yes" contains SOA
+    Given the message "yes" contains SOA
     And I set heading with internal line break: "<line1>" + CRLF + "<line2>"
-    And I add address line "QN SWIRI1G"
-    And I finalize the composed message
-    When the message is evaluated
+    And I add address line "QN JFKNYBA"
+    And the message is composed
+    When I send the composed message via the Test Harness
     Then the overall disposition is "rejected"
     And the reason is "INVALID HEADING SECTION"
 
@@ -166,13 +148,12 @@ Feature: Type-B Heading Section handling in Mercury
 
   @terminator @edge @positive
   Scenario Outline: Heading terminates with spacing signal (5 spaces) and/or SOA
-    Given connection setting "acceptHeading" is "true"
-    And the message "yes" contains SOA
+    Given the message "yes" contains SOA
     And pre-SOA is a Standard Heading with valid serial and supplemental "<supplemental>"
     And the heading terminator is "<terminator>"
-    And I add address line "QN SWIRI1G"
-    And I finalize the composed message
-    When the message is evaluated
+    And I add address line "QN JFKNYBA"
+    And the message is composed
+    When I send the composed message via the Test Harness
     Then the overall disposition is "accepted"
     And the parsed heading type is "standard"
 
@@ -183,12 +164,14 @@ Feature: Type-B Heading Section handling in Mercury
 
   @length @edge @positive
   Scenario: No maximum size enforced for heading line
-    Given connection setting "acceptHeading" is "true"
-    And the message "hasSOA" contains SOA
+    Given the message "hasSOA" contains SOA
     And pre-SOA is a Custom Heading with extremely long content of length "5000"
-    And I add address line "QN SWIRI1G"
-    And I finalize the composed message
-    When the message is evaluated
+    And I add address line "QN JFKNYBA"
+    And the message is composed
+    When I send the composed message via the Test Harness
     Then the overall disposition is "accepted"
     And the parsed heading type is "custom"
     And the forwarded heading equals the received heading (unchanged)
+
+  @length @edge @positive
+  Scenario: Heading containing SUID information

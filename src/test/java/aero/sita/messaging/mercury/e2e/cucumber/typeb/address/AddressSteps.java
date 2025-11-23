@@ -101,8 +101,4 @@ public class AddressSteps {
   @Then("for destination {string} the SAL is the first RI of that destination and NALs include {string}")
   public void perDestinationAssertion(String dest, String allRIs) {
   }
-
-  @When("I send the composed message via the Test Harness")
-  public void iSendTheComposedMessageViaTheTestHarness() {
-  }
 }

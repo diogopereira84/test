@@ -15,94 +15,61 @@ import aero.sita.messaging.mercury.e2e.model.testharness.request.SendMessageIbmM
 import aero.sita.messaging.mercury.e2e.utilities.format.typeb.TypeBMessage;
 import java.util.Collections;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
-/**
- * Helper class for message injection operations.
- * This utility class provides convenient methods for injecting messages
- * into the Mercury system via the test-harness. It encapsulates common
- * message injection patterns and reduces code duplication in test scenarios.
- * Following the Single Responsibility Principle, this class focuses solely
- * on message injection helper operations.
- */
 @Slf4j
 @Component
 public class MessageInjectionHelper {
 
   private final TestHarnessClient testHarnessClient;
+  private final MongoGenericHelper mongoHelper;
+
   private final String defaultServer;
   private final Integer defaultPort;
   private final String defaultQueue;
+  private final String configDbName;
 
   @Autowired
   public MessageInjectionHelper(
       TestHarnessClient testHarnessClient,
+      MongoGenericHelper mongoHelper,
       @Value("${test-harness.default.server:localhost}") String defaultServer,
       @Value("${test-harness.default.port:1414}") Integer defaultPort,
-      @Value("${test-harness.default.queue:DEV.QUEUE.1}") String defaultQueue) {
+      @Value("${test-harness.default.queue:DEV.QUEUE.1}") String defaultQueue,
+      @Value("${configuration.database.name:configuration}") String configDbName) {
     this.testHarnessClient = testHarnessClient;
+    this.mongoHelper = mongoHelper;
     this.defaultServer = defaultServer;
     this.defaultPort = defaultPort;
     this.defaultQueue = defaultQueue;
+    this.configDbName = configDbName;
   }
 
-  /**
-   * Injects a Type B message using default destination settings.
-   *
-   * @param message the Type B message to inject
-   */
+  public void injectWithSmartRouting(String messageContent) {
+    String targetAddress = extractRecipientAddress(messageContent);
+    String targetQueue = resolveInQueueForAddress(targetAddress);
+
+    log.info("Smart Routing: Address '{}' resolved to Queue '{}'", targetAddress, targetQueue);
+    injectRawMessage(messageContent, defaultServer, defaultPort, targetQueue);
+  }
+
   public void injectTypeB(TypeBMessage message) {
-    log.info("Injecting Type B message");
-
-    // Log the Type B message structure at DEBUG level
-    if (log.isDebugEnabled()) {
-      logTypeBMessageStructure(message);
-    }
-
-    String messageString = message.toMessageString();
-    injectRawMessage(messageString);
+    injectRawMessage(message.toMessageString());
   }
 
-  /**
-   * Injects a Type B message to a specific destination.
-   *
-   * @param message   the Type B message to inject
-   * @param server    the target server address
-   * @param port      the target server port
-   * @param queueName the target queue name
-   */
   public void injectTypeB(TypeBMessage message, String server, Integer port, String queueName) {
-    log.info("Injecting Type B message to {}:{} queue: {}", server, port, queueName);
-
-    // Log the Type B message structure at DEBUG level
-    if (log.isDebugEnabled()) {
-      logTypeBMessageStructure(message);
-    }
-
-    String messageString = message.toMessageString();
-    injectRawMessage(messageString, server, port, queueName);
+    injectRawMessage(message.toMessageString(), server, port, queueName);
   }
 
-  /**
-   * Injects a raw message string using default destination settings.
-   *
-   * @param messageContent the raw message content to inject
-   */
   public void injectRawMessage(String messageContent) {
     injectRawMessage(messageContent, defaultServer, defaultPort, defaultQueue);
   }
 
-  /**
-   * Injects a raw message string to a specific destination.
-   *
-   * @param messageContent the raw message content to inject
-   * @param server         the target server address
-   * @param port           the target server port
-   * @param queueName      the target queue name
-   */
   public void injectRawMessage(String messageContent, String server, Integer port, String queueName) {
     log.info("Injecting message to {}:{} queue: {}", server, port, queueName);
     log.debug("Message content: {}", messageContent);
@@ -119,106 +86,50 @@ public class MessageInjectionHelper {
         .build();
 
     testHarnessClient.sendMessage(request);
-
     log.info("Message injected successfully");
   }
 
-  /**
-   * Injects a message to multiple queues on the same server.
-   *
-   * @param messageContent the raw message content to inject
-   * @param server         the target server address
-   * @param port           the target server port
-   * @param queueNames     list of target queue names
-   */
-  public void injectToMultipleQueues(String messageContent, String server,
-                                     Integer port, List<String> queueNames) {
-    log.info("Injecting message to {}:{} queues: {}", server, port, queueNames);
+  private String extractRecipientAddress(String message) {
+    Pattern pattern = Pattern.compile("[A-Z]{2}[\\s]+([A-Z0-9]{7})");
+    Matcher matcher = pattern.matcher(message);
 
-    DestinationDetails destination = DestinationDetails.builder()
-        .server(server)
-        .port(port)
-        .destinationNames(queueNames)
-        .build();
-
-    SendMessageIbmMqRequest request = SendMessageIbmMqRequest.builder()
-        .message(messageContent)
-        .destinationsDetailsList(Collections.singletonList(destination))
-        .build();
-
-    testHarnessClient.sendMessage(request);
-
-    log.info("Message injected to {} queues successfully", queueNames.size());
+    if (matcher.find()) {
+      return matcher.group(1);
+    }
+    log.warn("Could not extract valid address from message for routing. Defaulting to 'JFKNYBA'.");
+    return "JFKNYBA";
   }
 
-  /**
-   * Injects a message to multiple destinations (different servers/ports).
-   *
-   * @param messageContent the raw message content to inject
-   * @param destinations   list of destination details
-   */
-  public void injectToMultipleDestinations(String messageContent,
-                                           List<DestinationDetails> destinations) {
-    log.info("Injecting message to {} destinations", destinations.size());
+  private String resolveInQueueForAddress(String address) {
+    try {
+      // 1. Route
+      Object destIdsObj = mongoHelper.getField(configDbName, "routes",
+          "criteria.addressMatcher", address, "destinationIds");
+      if (destIdsObj == null) {
+        return defaultQueue;
+      }
+      List<String> destinationIds = (List<String>) destIdsObj;
+      if (destinationIds.isEmpty()) {
+        return defaultQueue;
+      }
 
-    SendMessageIbmMqRequest request = SendMessageIbmMqRequest.builder()
-        .message(messageContent)
-        .destinationsDetailsList(destinations)
-        .build();
+      // 2. Destination
+      Object connIdsObj = mongoHelper.getField(configDbName, "destinations",
+          "_id", destinationIds.get(0), "connectionIds");
+      List<String> connectionIds = (List<String>) connIdsObj;
+      if (connectionIds.isEmpty()) {
+        return defaultQueue;
+      }
 
-    testHarnessClient.sendMessage(request);
+      // 3. Connection
+      String inQueue = (String) mongoHelper.getField(configDbName, "connections",
+          "_id", connectionIds.get(0), "inQueue");
 
-    log.info("Message injected to multiple destinations successfully");
-  }
+      return inQueue != null ? inQueue : defaultQueue;
 
-  /**
-   * Injects a message with a specific load profile ID.
-   *
-   * @param messageContent the raw message content to inject
-   * @param loadProfileId  the load profile ID to associate with this message
-   */
-  public void injectWithLoadProfile(String messageContent, Long loadProfileId) {
-    log.info("Injecting message with load profile ID: {}", loadProfileId);
-
-    DestinationDetails destination = DestinationDetails.builder()
-        .server(defaultServer)
-        .port(defaultPort)
-        .destinationNames(Collections.singletonList(defaultQueue))
-        .build();
-
-    SendMessageIbmMqRequest request = SendMessageIbmMqRequest.builder()
-        .message(messageContent)
-        .destinationsDetailsList(Collections.singletonList(destination))
-        .loadProfileId(loadProfileId)
-        .build();
-
-    testHarnessClient.sendMessage(request);
-
-    log.info("Message injected with load profile ID successfully");
-  }
-
-  /**
-   * Logs the Type B message structure at DEBUG level.
-   * Displays the message in a readable format showing each component.
-   *
-   * @param message the Type B message to log
-   */
-  private void logTypeBMessageStructure(TypeBMessage message) {
-    log.debug("=========================== Type B Message ===========================");
-    log.debug("Heading Line    : {}", message.getHeadingLine());
-    log.debug("Address Line    : .{}", message.getNormalAddressLine());
-    log.debug("Origin Line     : {}", message.getOriginLine());
-    log.debug("Text Content    : {}", message.getText());
-    log.debug("======================================================================");
-
-    // Also log the formatted message with control characters visible
-    String formatted = message.toMessageString();
-    String displayFormat = formatted
-        .replace("\u0001", "<SOH>")
-        .replace("\u0002", "<STX>")
-        .replace("\u0003", "<ETX>")
-        .replace("\r\n", "\n");
-
-    log.debug("Formatted Message:\n{}", displayFormat);
+    } catch (Exception e) {
+      log.error("Smart Routing Failed for address {}. Fallback to default.", address, e);
+      return defaultQueue;
+    }
   }
 }
