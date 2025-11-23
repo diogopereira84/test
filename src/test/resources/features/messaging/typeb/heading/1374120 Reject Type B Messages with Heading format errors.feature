@@ -6,26 +6,53 @@ Feature: Type-B Heading Section handling in Mercury
   Heading Section (content preceding the SOA).
 
   Background:
-    # We start with a clean slate for each scenario to allow specific SOA config
+    # --- DATA INTEGRITY CHECK ---
+    # Ensure the configuration database has the required routing data
+    Given the "configuration.hosts" collection contains the following documents:
+      | _id     | type  | name    | enabled |
+      | server1 | IBMMQ | server1 | true    |
+
+    And the "configuration.connections" collection contains the following documents:
+      | _id         | type  | name         | serviceAddress | format | hostId  | inQueue        | outQueue      | messageConfiguration.acceptMessagesWithAHeadingSection | enabled |
+      | connectionA | IBMMQ | connectionA  | LETTTLK        | TYPE_B | server1 | LETTTLK.OUT    | LETTTLK.IN    | true                                                   | true    |
+      | connectionB | IBMMQ | connectionB  | LETRRLK        | TYPE_B | server1 | LETRRLK.OUT    | LETRRLK.IN    | true                                                   | true    |
+      | connectionC | IBMMQ | connectionC  | LETVVLK        | TYPE_B | server1 | LETVVLK.OUT    | LETVVLK.IN    | false                                                  | true    |
+      | connectionD | IBMMQ | connectionD  | LETCCLK        | TYPE_B | server1 | LETCCLK.OUT    | LETCCLK.IN    | false                                                  | true    |
+
+    And the "configuration.destinations" collection contains the following documents:
+      | _id          | connectionIds[] | enabled |
+      | destinationA | connectionA     | true    |
+      | destinationB | connectionB     | true    |
+      | destinationC | connectionC     | true    |
+      | destinationD | connectionD     | true    |
+
+    And the "configuration.routes" collection contains the following documents:
+      | _id | type   | criteria.addressMatcher | criteria.type | destinationIds[] | enabled |
+      | 175 | DIRECT | JFKNYBA                 | DISCRETE      | destinationA     | true    |
+      | 176 | DIRECT | CDGFRAF                 | DISCRETE      | destinationB     | true    |
+      | 177 | DIRECT | SINSGSQ                 | DISCRETE      | destinationC     | true    |
+      | 178 | DIRECT | FRADELH                 | DISCRETE      | destinationD     | true    |
+
+    And the "configuration.routing-indicators" collection contains the following documents:
+      | _id     | type     | locationIdentifier | departmentCode | airlineCode |
+      | JFKNYBA | DISCRETE | JFK                | NY             | BA          |
+      | CDGFRAF | DISCRETE | CDG                | FR             | AF          |
+      | SINSGSQ | DISCRETE | SIN                | SG             | SQ          |
+      | FRADELH | DISCRETE | FRA                | DE             | LH          |
+
+    # --- TEST SETUP ---
     Given a clean TypeBComposer
-    # Valid body content to ensure E2E success if heading is valid
     And I set originator "LKYSOLT" and identity "3456700"
     And I add text line "Standard UAT Body Text"
 
   # ==============================================================================
   # GROUP 1: Heading Support DISABLED (acceptHeading = false)
-  # Rule: Mercury assumes message starts with Address.
-  # 1. If NO SOA: Accept (Assume Address).
-  # 2. If SOA exists: Check content before it. Only EOA or Pilot allowed.
   # ==============================================================================
 
   @config-disabled @edge @positive
-  Scenario Outline: [DISABLED] Accept message when content preceding SOA is valid address element or empty
+  Scenario Outline: [DISABLED] Accept message when no actual heading content precedes SOA
     Given connection setting "acceptHeading" is "false"
-    # Configuration of the message structure
-    And the message "<hasSOA>" contains SOA
-    And I set the content immediately preceding the SOA to "<preSoaContent>"
-    # Body is mandatory for valid Type B
+    When I set the content immediately preceding the SOA to <preSoaContent>
     And I add address line "QN SWIRI1G"
     And I finalize the composed message
     When the message is evaluated
@@ -33,18 +60,16 @@ Feature: Type-B Heading Section handling in Mercury
     And the heading detection result is "none"
 
     Examples:
-      | hasSOA | preSoaContent         | description                                      |
-      | no     | (n/a)                 | No SOA -> Assumes Address (Starts with QN...)    |
-      | yes    | AddressEndIndicator   | SOA present, but preceded by \r\n. (Valid flow)  |
-      | yes    | PilotSignal           | SOA present, but preceded by Pilot (Valid flow)  |
-      | yes    |                       | SOA present, but preceded by nothing (Empty)     |
+      | description           | preSoaContent         |
+      | Empty (SOA is first)  | ""                    |
+      | EOA token preceding   | "AddressEndIndicator" |
+      | Pilot Signal preceding| "PilotSignal"         |
 
   @config-disabled @negative
   Scenario: [DISABLED] Reject message when actual text content precedes SOA
     Given connection setting "acceptHeading" is "false"
     And the message "yes" contains SOA
-    # Any text that is NOT EOA or Pilot is considered a Heading -> Rejected
-    And I set the content immediately preceding the SOA to "GENERIC HEADING TEXT"
+    When I set the content immediately preceding the SOA to "GENERIC HEADING TEXT"
     And I add address line "QN SWIRI1G"
     And I finalize the composed message
     When the message is evaluated
@@ -52,8 +77,7 @@ Feature: Type-B Heading Section handling in Mercury
     And the reason is "HEADING SECTION NOT ALLOWED"
 
   # ==============================================================================
-  # GROUP 2: Heading Support ENABLED - Valid Formats (Positive)
-  # Rule: Accept Standard, SUID, Custom. Preserve Prefixes.
+  # GROUP 2: Heading Support ENABLED - Prefixes and Forwarding
   # ==============================================================================
 
   @config-enabled @preservation @positive
@@ -123,14 +147,12 @@ Feature: Type-B Heading Section handling in Mercury
 
   # ==============================================================================
   # GROUP 3: Heading Support ENABLED - Invalid Formats (Negative)
-  # Rule: Heading must be single line.
   # ==============================================================================
 
   @config-enabled @validation @negative
   Scenario Outline: [ENABLED] Reject Multi-line headings
     Given connection setting "acceptHeading" is "true"
     And the message "yes" contains SOA
-    # Injects explicit CRLF in the middle of the heading content
     And I set heading with internal line break: "<line1>" + CRLF + "<line2>"
     And I add address line "QN SWIRI1G"
     And I finalize the composed message
@@ -158,3 +180,15 @@ Feature: Type-B Heading Section handling in Mercury
       | supplemental | terminator     |
       | HELLO        | 5SpacesThenSOA |
       | WORLD        | SOA            |
+
+  @length @edge @positive
+  Scenario: No maximum size enforced for heading line
+    Given connection setting "acceptHeading" is "true"
+    And the message "hasSOA" contains SOA
+    And pre-SOA is a Custom Heading with extremely long content of length "5000"
+    And I add address line "QN SWIRI1G"
+    And I finalize the composed message
+    When the message is evaluated
+    Then the overall disposition is "accepted"
+    And the parsed heading type is "custom"
+    And the forwarded heading equals the received heading (unchanged)
