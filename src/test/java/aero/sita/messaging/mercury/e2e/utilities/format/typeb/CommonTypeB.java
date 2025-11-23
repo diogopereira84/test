@@ -16,39 +16,27 @@ import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-/**
- * Single common context across sections (permissive).
- */
 public class CommonTypeB {
   private static final Logger LOG = LoggerFactory.getLogger(CommonTypeB.class);
   private final List<AddressEntry> addresses = new ArrayList<>();
   private final List<String> textLines = new ArrayList<>();
   private final List<String> preTextRaw = new ArrayList<>();
   private final List<String> postTextRaw = new ArrayList<>();
+
   private SoaPattern soa = SoaPattern.CRLF_SOH;
   private TypeBMessageBuilder.AddressEoaToken eoa = TypeBMessageBuilder.AddressEoaToken.DOT;
   private boolean emitTextDelimiters = false;
   private boolean emitSpacingUS = false;
+
   private String heading;
+  private String headingPrefix = "";
+  private String headingTerminator = "";
+
   private String diversionRoutingIndicator;
   private String originatorIndicator;
   private String doubleSignature;
   private String messageIdentity;
   private String firstAddressOverrideRaw;
-
-
-  public static String visualize(String s) {
-    if (s == null) {
-      return "<null>";
-    }
-    return s.replace(ControlChars.CRLF, "\\r\\n")
-        .replace("\u0001", "<SOH>").replace("\u0002", "<STX>").replace("\u0003", "<ETX>").replace("\u001A", "<SUB>");
-  }
-
-  public static String escaped(String s) throws JsonProcessingException {
-    ObjectMapper om = new ObjectMapper();
-    return om.writeValueAsString(s);
-  }
 
   public CommonTypeB reset() {
     soa = SoaPattern.CRLF_SOH;
@@ -56,6 +44,8 @@ public class CommonTypeB {
     emitTextDelimiters = false;
     emitSpacingUS = false;
     heading = null;
+    headingPrefix = "";
+    headingTerminator = "";
     diversionRoutingIndicator = null;
     addresses.clear();
     originatorIndicator = null;
@@ -68,19 +58,17 @@ public class CommonTypeB {
     return this;
   }
 
-  // Config
   public CommonTypeB withSoa(SoaPattern p) {
-    this.soa = (p == null ? SoaPattern.CRLF_SOH : p);
+    this.soa = p;
     return this;
   }
 
   public CommonTypeB withSoa(String tokenOrSeq) {
-    this.soa = SoaPattern.parse(tokenOrSeq);
-    return this;
-  }
-
-  public CommonTypeB withEoa(TypeBMessageBuilder.AddressEoaToken t) {
-    this.eoa = (t == null ? TypeBMessageBuilder.AddressEoaToken.DOT : t);
+    if ("no".equalsIgnoreCase(tokenOrSeq) || "noSOA".equalsIgnoreCase(tokenOrSeq)) {
+      this.soa = null;
+    } else {
+      this.soa = SoaPattern.parse(tokenOrSeq);
+    }
     return this;
   }
 
@@ -99,9 +87,18 @@ public class CommonTypeB {
     return this;
   }
 
-  // Sections
   public CommonTypeB withHeading(String h) {
     this.heading = h;
+    return this;
+  }
+
+  public CommonTypeB withHeadingPrefix(String p) {
+    this.headingPrefix = p;
+    return this;
+  }
+
+  public CommonTypeB withHeadingTerminator(String t) {
+    this.headingTerminator = t;
     return this;
   }
 
@@ -117,30 +114,11 @@ public class CommonTypeB {
     return this;
   }
 
-  /**
-   * Preferred unified API
-   */
   public CommonTypeB withAddressLine(String line) {
     if (line != null) {
       addresses.add(new AddressEntry(AddressEntry.Kind.ADDRESS, line));
     }
     return this;
-  }
-
-  /**
-   * @deprecated
-   */
-  @Deprecated
-  public CommonTypeB withSal(String line) {
-    return withAddressLine(line);
-  }
-
-  /**
-   * @deprecated
-   */
-  @Deprecated
-  public CommonTypeB withNal(String line) {
-    return withAddressLine(line);
   }
 
   public CommonTypeB withOriginatorIndicator(String oi) {
@@ -165,66 +143,42 @@ public class CommonTypeB {
     return this;
   }
 
-  public CommonTypeB withTextLines(List<String> t) {
-    if (t != null) {
-      t.forEach(this::withTextLine);
-    }
-    return this;
-  }
-
-  // Escape hatches
   public CommonTypeB withAddressOverrideRaw(String raw) {
     this.firstAddressOverrideRaw = raw;
     return this;
   }
 
   public CommonTypeB addPreTextRaw(String raw) {
-    if (raw != null) {
-      preTextRaw.add(raw);
-    }
+    if (raw != null) preTextRaw.add(raw);
     return this;
   }
 
   public CommonTypeB addPostTextRaw(String raw) {
-    if (raw != null) {
-      postTextRaw.add(raw);
-    }
+    if (raw != null) postTextRaw.add(raw);
     return this;
   }
 
-  private String craftedSummary() {
-    StringBuilder sb = new StringBuilder();
-    sb.append("SOA=").append(soa == null ? "null" : soa.name())
-        .append(", EOA=").append(eoa == null ? "null" : eoa.name())
-        .append(", heading=").append(heading)
-        .append(", diversionRI=").append(diversionRoutingIndicator)
-        .append(", originator=").append(originatorIndicator)
-        .append(", doubleSig=").append(doubleSignature)
-        .append(", msgId=").append(messageIdentity)
-        .append(", emitTextDelims=").append(emitTextDelimiters)
-        .append(", emitUS=").append(emitSpacingUS)
-        .append(", firstAddressOverride=").append(firstAddressOverrideRaw);
-    sb.append("\nAddresses:");
-    int i = 0;
-    for (AddressEntry e : addresses) {
-      sb.append("\n  ").append(++i).append(". ").append(e.kind).append(" -> ").append(e.line);
-    }
-    sb.append("\nTextLines:");
-    i = 0;
-    for (String t : textLines) {
-      sb.append("\n  ").append(++i).append(". ").append(t);
-    }
-    sb.append("\npreTextRaw=").append(preTextRaw.size())
-        .append(", postTextRaw=").append(postTextRaw.size());
-    return sb.toString();
-  }
-
   public String compose() {
-    TypeBMessageBuilder c = new TypeBMessageBuilder().reset()
-        .withSoa(soa).withEoaToken(eoa).emitTextDelimiters(emitTextDelimiters).emitSpacingUS(emitSpacingUS)
-        .withHeading(heading).withDiversionRoutingIndicator(diversionRoutingIndicator)
-        .withOriginatorIndicator(originatorIndicator).withDoubleSignature(doubleSignature).withMessageIdentity(messageIdentity)
+    TypeBMessageBuilder c = new TypeBMessageBuilder().reset();
+
+    if (soa == null) {
+      c.withExplicitSoa(null);
+    } else {
+      c.withSoa(soa);
+    }
+
+    c.withEoaToken(eoa)
+        .emitTextDelimiters(emitTextDelimiters)
+        .emitSpacingUS(emitSpacingUS)
+        .withHeading(heading)
+        .withHeadingPrefix(headingPrefix)
+        .withHeadingTerminator(headingTerminator)
+        .withDiversionRoutingIndicator(diversionRoutingIndicator)
+        .withOriginatorIndicator(originatorIndicator)
+        .withDoubleSignature(doubleSignature)
+        .withMessageIdentity(messageIdentity)
         .withAddressOverrideRaw(firstAddressOverrideRaw);
+
     for (AddressEntry e : addresses) {
       if (e.kind == AddressEntry.Kind.PILOT) {
         c.withPilot(e.line);
@@ -235,26 +189,43 @@ public class CommonTypeB {
     textLines.forEach(c::withTextLine);
     preTextRaw.forEach(c::addPreTextRawSection);
     postTextRaw.forEach(c::addPostTextRawSection);
+
     String out = c.compose();
     if (LOG.isInfoEnabled()) {
-      LOG.info("[TypeB] (CTX) Composed (tokens)\n{}", visualize(out));
       try {
-        LOG.debug("[TypeB] (CTX) Composed (escaped) \"{}\"", escaped(out));
-      } catch (Exception ignore) {
+        String plaintext = escaped(out);
+        LOG.info("[TypeB] (CTX) Composed (tokens)\n{}\n[TypeB] (CTX) Plaintext: {}", visualize(out), plaintext);
+      } catch (JsonProcessingException e) {
+        LOG.warn("Failed to generate plaintext log", e);
       }
     }
     return out;
   }
 
+  public static String visualize(String s) {
+    if (s == null) return "<null>";
+    return s.replace(ControlChars.CRLF, "\\r\\n")
+        .replace("\u0001", "<SOH>").replace("\u0002", "<STX>").replace("\u0003", "<ETX>")
+        .replace("\u001A", "<SUB>")
+        .replace("\u001F", "<US>");
+  }
+
+  public static String escaped(String s) throws JsonProcessingException {
+    return new ObjectMapper().writeValueAsString(s);
+  }
+
+  public String escaped() {
+    return visualize(compose());
+  }
+
+  public String escapedJson() throws JsonProcessingException {
+    return escaped(compose());
+  }
+
   private static final class AddressEntry {
     final Kind kind;
     final String line;
-
-    AddressEntry(Kind kind, String line) {
-      this.kind = kind;
-      this.line = line;
-    }
-
+    AddressEntry(Kind kind, String line) { this.kind = kind; this.line = line; }
     enum Kind { PILOT, ADDRESS }
   }
 }

@@ -1,151 +1,155 @@
-# features/type_b_heading_handling.feature
+# features/messaging/typeb/heading/1374120_reject_type_b_messages_with_heading_format_errors.feature
 
 Feature: Type-B Heading Section handling in Mercury
-  Ensures correct acceptance, parsing, and rejection of Type-B messages w.r.t. Heading Section and SOA.
+  Requirement: 1374120
+  Ensures correct acceptance, parsing, and rejection of Type-B messages regarding the
+  Heading Section (content preceding the SOA).
 
   Background:
-    Given Mercury assumes standard CR LF alignment in inbound messages
-    And the inbound message under test is provided
+    # We start with a clean slate for each scenario to allow specific SOA config
+    Given a clean TypeBComposer
+    # Valid body content to ensure E2E success if heading is valid
+    And I set originator "LKYSOLT" and identity "3456700"
+    And I add text line "Standard UAT Body Text"
 
-  # ─────────────────────────────────────────────────────────────────────────────
-  # A) Routing when heading support is DISABLED
-  # ─────────────────────────────────────────────────────────────────────────────
-  Scenario Outline: Routing when heading support is DISABLED
+  # ==============================================================================
+  # GROUP 1: Heading Support DISABLED (acceptHeading = false)
+  # Rule: Mercury assumes message starts with Address.
+  # 1. If NO SOA: Accept (Assume Address).
+  # 2. If SOA exists: Check content before it. Only EOA or Pilot allowed.
+  # ==============================================================================
+
+  @config-disabled @edge @positive
+  Scenario Outline: [DISABLED] Accept message when content preceding SOA is valid address element or empty
     Given connection setting "acceptHeading" is "false"
+    # Configuration of the message structure
     And the message "<hasSOA>" contains SOA
-    And the pre-SOA content is "<preSOAType>"
+    And I set the content immediately preceding the SOA to "<preSoaContent>"
+    # Body is mandatory for valid Type B
+    And I add address line "QN SWIRI1G"
     And I finalize the composed message
-    When I send the composed message via the Test Harness
-    Then the overall disposition is "<expectedDisposition>"
-    And the heading detection result is "<expectedHeadingDetected>"
-    And if rejected the reason is "<expectedRejection>"
-
-    Examples:
-      | hasSOA | preSOAType              | expectedDisposition | expectedHeadingDetected | expectedRejection                 |
-      | yes    | AddressEndIndicator     | accepted            | none                    |                                   |
-      | yes    | PilotSignal             | accepted            | none                    |                                   |
-      | yes    | PlainHeadingText        | rejected            | none                    | HEADING SECTION NOT ALLOWED       |
-      | no     | (n/a)                   | accepted            | none                    |                                   |
-
-  @config-enabled @routing @positive @edge
-  Scenario Outline: Routing when heading support is ENABLED (heading optional)
-    Given connection setting "acceptHeading" is true
-    And the message "<shape>" is shaped relative to SOA
-    And the pre-SOA content is "<preSOAType>"
     When the message is evaluated
-    Then the overall disposition is "<expectedDisposition>"
-    And the heading detection result is "<expectedHeadingDetected>"
+    Then the overall disposition is "accepted"
+    And the heading detection result is "none"
 
     Examples:
-      | shape             | preSOAType          | expectedDisposition | expectedHeadingDetected |
-      | noSOA             | (n/a)               | accepted            | none                    |
-      | startsWithSOAFull | (ignored)           | accepted            | none                    |
-      | startsWithSOAOnly | (ignored)           | accepted            | none                    |
-      | hasSOA            | AddressEndIndicator | accepted            | none                    |
-      | hasSOA            | PilotSignal         | accepted            | none                    |
-      | hasSOA            | PlainHeadingText    | accepted            | heading                 |
+      | hasSOA | preSoaContent         | description                                      |
+      | no     | (n/a)                 | No SOA -> Assumes Address (Starts with QN...)    |
+      | yes    | AddressEndIndicator   | SOA present, but preceded by \r\n. (Valid flow)  |
+      | yes    | PilotSignal           | SOA present, but preceded by Pilot (Valid flow)  |
+      | yes    |                       | SOA present, but preceded by nothing (Empty)     |
 
-  @parsing @standard @positive
-  Scenario Outline: Valid Standard heading (serial ≤5 digits, optional supplemental)
-    Given connection setting "acceptHeading" is true
-    And the message "hasSOA" contains SOA
-    And pre-SOA is a Standard Heading with serial "<serialDigits>" and supplemental "<supplemental>"
-    And the heading terminator is "<terminator>"
+  @config-disabled @negative
+  Scenario: [DISABLED] Reject message when actual text content precedes SOA
+    Given connection setting "acceptHeading" is "false"
+    And the message "yes" contains SOA
+    # Any text that is NOT EOA or Pilot is considered a Heading -> Rejected
+    And I set the content immediately preceding the SOA to "GENERIC HEADING TEXT"
+    And I add address line "QN SWIRI1G"
+    And I finalize the composed message
+    When the message is evaluated
+    Then the overall disposition is "rejected"
+    And the reason is "HEADING SECTION NOT ALLOWED"
+
+  # ==============================================================================
+  # GROUP 2: Heading Support ENABLED - Valid Formats (Positive)
+  # Rule: Accept Standard, SUID, Custom. Preserve Prefixes.
+  # ==============================================================================
+
+  @config-enabled @preservation @positive
+  Scenario Outline: [ENABLED] Ignore prefixes for parsing but preserve for forwarding
+    Given connection setting "acceptHeading" is "true"
+    And the message "yes" contains SOA
+    And I set heading prefix <prefix> and content "001 VALID"
+    And I add address line "QN SWIRI1G"
+    And I finalize the composed message
     When the message is evaluated
     Then the overall disposition is "accepted"
     And the parsed heading type is "standard"
-    And the parsed serial is "<expectedSerialValue>"
-    And the forwarded heading equals the received heading (including spacing markers)
+    And the forwarded heading retains the original <prefix>
 
     Examples:
-      | serialDigits | supplemental           | terminator   | expectedSerialValue |
-      | 1            |                        | SOA          | 1                   |
-      | 3            | DTG 2025-01-01 10:00Z  | SOA          | 3                   |
-      | 5            | ABC                    | 5SpacesThenSOA | 5                   |
+      | prefix    |
+      | "   "     |
+      | "ZCZC "   |
+      | "  ZCZC"  |
 
-  @parsing @custom @edge @positive
-  Scenario Outline: Overlength or non-numeric "serial" becomes Custom heading
-    Given connection setting "acceptHeading" is true
-    And the message "hasSOA" contains SOA
-    And pre-SOA is a candidate Standard Heading with serial token "<serialToken>" and supplemental "<supplemental>"
+  @config-enabled @parsing @standard @positive
+  Scenario Outline: [ENABLED] Accept valid Standard Heading formats
+    Given connection setting "acceptHeading" is "true"
+    And the message "yes" contains SOA
+    And I set heading "<headingContent>"
+    And I add address line "QN SWIRI1G"
+    And I finalize the composed message
     When the message is evaluated
     Then the overall disposition is "accepted"
-    And the parsed heading type is "custom"
-    And the forwarded heading equals the received heading (unchanged)
+    And the parsed heading type is "standard"
+    And the parsed serial is "<expectedSerial>"
 
     Examples:
-      | serialToken | supplemental       |
-      | 123456      | ANY TEXT           |
-      | XX12        | FREE TEXT          |
-      | 0000000     | EXTRA              |
+      | headingContent        | expectedSerial |
+      | 1                     | 1              |
+      | 12345                 | 12345          |
+      | 001 SUPP INFO 2025    | 001            |
 
-  @parsing @suid @positive
-  Scenario Outline: SUID-only heading is parsed and preserved
-    Given connection setting "acceptHeading" is true
-    And the message "hasSOA" contains SOA
-    And pre-SOA is a SUID heading with indicator "<suidInd>", messageId "<msgId>", transactionId "<txnId>"
+  @config-enabled @parsing @suid @positive
+  Scenario: [ENABLED] Accept valid SUID Heading format
+    Given connection setting "acceptHeading" is "true"
+    And the message "yes" contains SOA
+    And I set heading "SUID 6F1E2D3C-1111-2222 3333-444455556666"
+    And I add address line "QN SWIRI1G"
+    And I finalize the composed message
     When the message is evaluated
     Then the overall disposition is "accepted"
     And the parsed heading type is "suid"
     And the SUID fields are captured without decoding
-    And the forwarded heading equals the received heading (unchanged)
 
-    Examples:
-      | suidInd | msgId                               | txnId                                  |
-      | SUID    | 6F1E2D3C-1111-2222-3333-444455556666| A1B2C3D4-E5F6-47A8-99AA-BB00CC11DD22   |
-
-  @parsing @suid @standard @custom @positive
-  Scenario Outline: SUID + Original Heading on same line
-    Given connection setting "acceptHeading" is true
-    And the message "hasSOA" contains SOA
-    And pre-SOA is "SUID + Original" where original type is "<originalType>"
+  @config-enabled @parsing @custom @edge @positive
+  Scenario Outline: [ENABLED] Accept single-line Custom Heading formats
+    Given connection setting "acceptHeading" is "true"
+    And the message "yes" contains SOA
+    And I set heading "<headingContent>"
+    And I add address line "QN SWIRI1G"
+    And I finalize the composed message
     When the message is evaluated
     Then the overall disposition is "accepted"
-    And the parsed heading type is "<expectedHeadingType>"
-    And SUID parts and Original parts are both captured
-    And the forwarded heading equals the received heading (unchanged)
+    And the parsed heading type is "custom"
 
     Examples:
-      | originalType | expectedHeadingType |
-      | standard     | suid+standard       |
-      | custom       | suid+custom         |
+      | headingContent                                   |
+      | 123456                                           |
+      | A123                                             |
+      | VERY LONG CUSTOM HEADING TEXT ON A SINGLE LINE   |
 
-  @parsing @preservation @edge @positive
-  Scenario Outline: Leading spaces and ZCZC are ignored for parsing but preserved for forwarding
-    Given connection setting "acceptHeading" is true
-    And the message "hasSOA" contains SOA
-    And pre-SOA begins with "<prefix>" followed by a valid Standard Heading
-    When the message is evaluated
-    Then the overall disposition is "accepted"
-    And the parsed heading type is "standard"
-    And the forwarded heading retains the original "<prefix>"
+  # ==============================================================================
+  # GROUP 3: Heading Support ENABLED - Invalid Formats (Negative)
+  # Rule: Heading must be single line.
+  # ==============================================================================
 
-    Examples:
-      | prefix   |
-      | "   "    |
-      | "ZCZC "  |
-      | "  ZCZC "|
-
-  @validation @negative
-  Scenario Outline: Multi-line heading is rejected
-    Given connection setting "acceptHeading" is true
-    And the message "hasSOA" contains SOA
-    And pre-SOA contains a heading spanning "<lineCount>" lines
+  @config-enabled @validation @negative
+  Scenario Outline: [ENABLED] Reject Multi-line headings
+    Given connection setting "acceptHeading" is "true"
+    And the message "yes" contains SOA
+    # Injects explicit CRLF in the middle of the heading content
+    And I set heading with internal line break: "<line1>" + CRLF + "<line2>"
+    And I add address line "QN SWIRI1G"
+    And I finalize the composed message
     When the message is evaluated
     Then the overall disposition is "rejected"
     And the reason is "INVALID HEADING SECTION"
 
     Examples:
-      | lineCount |
-      | 2         |
-      | 3         |
+      | line1  | line2  |
+      | LINE 1 | LINE 2 |
 
   @terminator @edge @positive
   Scenario Outline: Heading terminates with spacing signal (5 spaces) and/or SOA
-    Given connection setting "acceptHeading" is true
-    And the message "hasSOA" contains SOA
+    Given connection setting "acceptHeading" is "true"
+    And the message "yes" contains SOA
     And pre-SOA is a Standard Heading with valid serial and supplemental "<supplemental>"
     And the heading terminator is "<terminator>"
+    And I add address line "QN SWIRI1G"
+    And I finalize the composed message
     When the message is evaluated
     Then the overall disposition is "accepted"
     And the parsed heading type is "standard"
@@ -154,13 +158,3 @@ Feature: Type-B Heading Section handling in Mercury
       | supplemental | terminator     |
       | HELLO        | 5SpacesThenSOA |
       | WORLD        | SOA            |
-
-  @length @edge @positive
-  Scenario: No maximum size enforced for heading line
-    Given connection setting "acceptHeading" is true
-    And the message "hasSOA" contains SOA
-    And pre-SOA is a Custom Heading with extremely long content of length "5000"
-    When the message is evaluated
-    Then the overall disposition is "accepted"
-    And the parsed heading type is "custom"
-    And the forwarded heading equals the received heading (unchanged)

@@ -16,7 +16,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Permissive TypeB builder. SAL/NAL are just "address lines" here.
+ * Permissive TypeB builder.
+ * Refactored to support 'Assumed Address' scenarios where SOA is null but addresses must still be generated.
  */
 public class TypeBMessageBuilder {
   private static final Logger LOG = LoggerFactory.getLogger(TypeBMessageBuilder.class);
@@ -24,26 +25,38 @@ public class TypeBMessageBuilder {
   private final List<String> textLines = new ArrayList<>();
   private final List<String> preTextRaw = new ArrayList<>();
   private final List<String> postTextRaw = new ArrayList<>();
+
   private SoaPattern soa = SoaPattern.CRLF_SOH;
   private AddressEoaToken eoa = AddressEoaToken.DOT;
   private boolean emitTextDelimiters = false;
   private boolean emitSpacingUS = false;
+
+  // Heading fields
   private String heading;
-  private String diversionRoutingIndicator; // QSP {RI7}
-  private String originatorIndicator;       // must be followed by space
+  private String headingPrefix = "";
+  private String headingTerminator = "";
+
+  // Discrete components
+  private String preSOAType;
+  private String plainHeadingText;
+  private String addressEndIndicator;
+  private String pilotSignal;
+
+  private String diversionRoutingIndicator;
+  private String originatorIndicator;
   private String doubleSignature;
   private String messageIdentity;
   private String firstAddressOverrideRaw;
 
-  // --- Discrete heading builder inputs (used by HeadingBuilderUtils) ---
-  private String preSOAType;
-  private String addressEndIndicator;
-  private String pilotSignal;
-  private String plainHeadingText;
-
+  // --- Public Setters ---
 
   public TypeBMessageBuilder preSOAType(String value) {
     this.preSOAType = value;
+    return this;
+  }
+
+  public TypeBMessageBuilder plainHeadingText(String value) {
+    this.plainHeadingText = value;
     return this;
   }
 
@@ -57,113 +70,19 @@ public class TypeBMessageBuilder {
     return this;
   }
 
-  public TypeBMessageBuilder plainHeadingText(String value) {
-    this.plainHeadingText = value;
+  public TypeBMessageBuilder withHeading(String h) {
+    this.heading = h;
     return this;
   }
 
-  /**
-   * Builds a heading line from the discrete fields managed by this builder.
-   *
-   * Order:
-   *   [preSOAType] [plainHeadingText][addressEndIndicator][pilotSignal]
-   *
-   * All components are optional; null/blank values are simply skipped.
-   * Caller is responsible for deciding how this string is used
-   * (e.g. passing it into {@link #withHeading(String)}).
-   */
-  public String build() {
-    StringBuilder sb = new StringBuilder();
-
-    if (preSOAType != null && !preSOAType.isBlank()) {
-      sb.append(preSOAType.trim()).append(' ');
-    }
-
-    if (plainHeadingText != null && !plainHeadingText.isBlank()) {
-      sb.append(plainHeadingText.trim());
-    }
-
-    if (addressEndIndicator != null && !addressEndIndicator.isBlank()) {
-      sb.append(addressEndIndicator.trim());
-    }
-
-    if (pilotSignal != null && !pilotSignal.isBlank()) {
-      sb.append(pilotSignal.trim());
-    }
-
-    return sb.toString();
+  public TypeBMessageBuilder withHeadingPrefix(String prefix) {
+    this.headingPrefix = prefix == null ? "" : prefix;
+    return this;
   }
 
-
-  // --- Logging helpers ---
-  public static String visualizeTokens(String s) {
-    if (s == null) {
-      return "null";
-    }
-    StringBuilder b = new StringBuilder();
-    for (int i = 0; i < s.length(); i++) {
-      char c = s.charAt(i);
-      switch (c) {
-        case '\r':
-          b.append("<CR>");
-          break;
-        case '\n':
-          b.append("<LF>");
-          break;
-        case 0x01:
-          b.append("<SOH>");
-          break;
-        case 0x02:
-          b.append("<STX>");
-          break;
-        case 0x03:
-          b.append("<ETX>");
-          break;
-        case 0x1F:
-          b.append("<US>");
-          break;
-        case 0x1A:
-          b.append("<SUB>");
-          break;
-        default:
-          b.append(c);
-      }
-    }
-    return b.toString();
-  }
-
-  public static String visualizeEscaped(String s) {
-    if (s == null) {
-      return "null";
-    }
-    StringBuilder b = new StringBuilder();
-    for (int i = 0; i < s.length(); i++) {
-      char c = s.charAt(i);
-      switch (c) {
-        case '\\':
-          b.append("\\\\");
-          break;
-        case '"':
-          b.append("\\");
-          break;
-        case '\r':
-          b.append("\\r");
-          break;
-        case '\n':
-          b.append("\\n");
-          break;
-        case '\t':
-          b.append("\\t");
-          break;
-        default:
-          if (c < 0x20 || c == 0x7F) {
-            b.append(String.format("\\u%04x", (int) c));
-          } else {
-            b.append(c);
-          }
-      }
-    }
-    return b.toString();
+  public TypeBMessageBuilder withHeadingTerminator(String terminator) {
+    this.headingTerminator = terminator == null ? "" : terminator;
+    return this;
   }
 
   public TypeBMessageBuilder reset() {
@@ -172,6 +91,12 @@ public class TypeBMessageBuilder {
     emitTextDelimiters = false;
     emitSpacingUS = false;
     heading = null;
+    headingPrefix = "";
+    headingTerminator = "";
+    preSOAType = null;
+    plainHeadingText = null;
+    addressEndIndicator = null;
+    pilotSignal = null;
     diversionRoutingIndicator = null;
     addresses.clear();
     originatorIndicator = null;
@@ -189,8 +114,17 @@ public class TypeBMessageBuilder {
     return this;
   }
 
+  public TypeBMessageBuilder withExplicitSoa(SoaPattern p) {
+    this.soa = p;
+    return this;
+  }
+
   public TypeBMessageBuilder withSoa(String tokenOrSeq) {
-    this.soa = SoaPattern.parse(tokenOrSeq);
+    if ("no".equalsIgnoreCase(tokenOrSeq) || "noSOA".equalsIgnoreCase(tokenOrSeq)) {
+      this.soa = null;
+    } else {
+      this.soa = SoaPattern.parse(tokenOrSeq);
+    }
     return this;
   }
 
@@ -214,39 +148,26 @@ public class TypeBMessageBuilder {
     return this;
   }
 
-  public TypeBMessageBuilder withHeading(String h) {
-    this.heading = h;
-    return this;
-  }
-
   public TypeBMessageBuilder withDiversionRoutingIndicator(String ri7) {
     this.diversionRoutingIndicator = (ri7 == null ? null : ri7.trim());
     return this;
   }
 
   public TypeBMessageBuilder withPilot(String line) {
-    if (line != null) {
-      addresses.add(new AddressEntry(AddressEntry.Kind.PILOT, line));
-    }
+    if (line != null) addresses.add(new AddressEntry(AddressEntry.Kind.PILOT, line));
     return this;
-  } // why: pilot requires ///// post-EOA
+  }
 
   public TypeBMessageBuilder withAddressLine(String line) {
-    if (line != null) {
-      addresses.add(new AddressEntry(AddressEntry.Kind.ADDRESS, line));
-    }
+    if (line != null) addresses.add(new AddressEntry(AddressEntry.Kind.ADDRESS, line));
     return this;
   }
 
   @Deprecated
-  public TypeBMessageBuilder withSal(String line) {
-    return withAddressLine(line);
-  }
+  public TypeBMessageBuilder withSal(String line) { return withAddressLine(line); }
 
   @Deprecated
-  public TypeBMessageBuilder withNal(String line) {
-    return withAddressLine(line);
-  }
+  public TypeBMessageBuilder withNal(String line) { return withAddressLine(line); }
 
   public TypeBMessageBuilder withOriginatorIndicator(String oi) {
     this.originatorIndicator = (oi == null ? null : oi.trim());
@@ -264,16 +185,12 @@ public class TypeBMessageBuilder {
   }
 
   public TypeBMessageBuilder withTextLine(String t) {
-    if (t != null) {
-      textLines.add(t);
-    }
+    if (t != null) textLines.add(t);
     return this;
   }
 
   public TypeBMessageBuilder withTextLines(List<String> t) {
-    if (t != null) {
-      t.forEach(this::withTextLine);
-    }
+    if (t != null) t.forEach(this::withTextLine);
     return this;
   }
 
@@ -283,59 +200,81 @@ public class TypeBMessageBuilder {
   }
 
   public TypeBMessageBuilder addPreTextRawSection(String raw) {
-    if (raw != null) {
-      preTextRaw.add(raw);
-    }
+    if (raw != null) preTextRaw.add(raw);
     return this;
   }
 
   public TypeBMessageBuilder addPostTextRawSection(String raw) {
-    if (raw != null) {
-      postTextRaw.add(raw);
-    }
+    if (raw != null) postTextRaw.add(raw);
     return this;
+  }
+
+  private String buildInternalHeading() {
+    if (heading != null) return heading;
+
+    StringBuilder sb = new StringBuilder();
+    if (preSOAType != null) sb.append(preSOAType).append(" ");
+    if (plainHeadingText != null) sb.append(plainHeadingText);
+    if (addressEndIndicator != null) sb.append(addressEndIndicator);
+    if (pilotSignal != null) sb.append(pilotSignal);
+
+    return sb.toString();
   }
 
   public String compose() {
     StringBuilder sb = new StringBuilder();
 
-    if (heading != null && !heading.isEmpty()) {
-      sb.append(heading).append(ControlChars.CRLF);
+    String effectiveHeading = buildInternalHeading();
+
+    // 1. Heading Section
+    if (effectiveHeading != null && !effectiveHeading.isEmpty()) {
+      sb.append(headingPrefix);
+      sb.append(effectiveHeading);
+      sb.append(headingTerminator);
+
+      if (headingTerminator.isEmpty()) {
+        sb.append(ControlChars.CRLF);
+      }
     }
+
     if (emitSpacingUS) {
       sb.append(ControlChars.US);
+    }
+
+    // 2. SOA (Start of Address) - Only appended if explicit SOA is set
+    if (soa != null) {
+      sb.append(soa.sequence());
     }
 
     if (firstAddressOverrideRaw != null && !firstAddressOverrideRaw.isEmpty()) {
       sb.append(firstAddressOverrideRaw);
     }
 
-    if (diversionRoutingIndicator != null) {
-      sb.append(soa.sequence()).append("QSP ").append(diversionRoutingIndicator).append(eoa.sequence()); // why: diversion line format
+    // Diversion requires SOA structure typically, but we follow config
+    if (diversionRoutingIndicator != null && soa != null) {
+      sb.append("QSP ").append(diversionRoutingIndicator).append(eoa.sequence());
     }
 
+    // 3. Addresses
+    // REFACTOR: Addresses are now appended even if SOA is null (Assumed Address scenario)
     for (AddressEntry e : addresses) {
       if (e.kind == AddressEntry.Kind.PILOT) {
-        sb.append(soa.sequence()).append(e.line).append(eoa.sequence()).append("/////"); // why: pilot signal
+        sb.append(e.line).append(eoa.sequence()).append("/////");
       } else {
-        sb.append(soa.sequence()).append(e.line).append(eoa.sequence());
+        sb.append(e.line).append(eoa.sequence());
       }
     }
 
+    // 4. Originator
     if (originatorIndicator != null) {
-      sb.append(originatorIndicator).append(' '); // why: spec requires trailing space after originator
-      if (doubleSignature != null) {
-        sb.append(doubleSignature);
-      }
-      if (messageIdentity != null) {
-        sb.append(messageIdentity);
-      }
+      sb.append(originatorIndicator).append(' ');
+      if (doubleSignature != null) sb.append(doubleSignature);
+      if (messageIdentity != null) sb.append(messageIdentity);
     }
 
-    for (String raw : preTextRaw) {
-      sb.append(raw);
-    }
+    for (String raw : preTextRaw) sb.append(raw);
 
+    // 5. Text Body
     if (emitTextDelimiters || !textLines.isEmpty()) {
       sb.append(ControlChars.CRLF).append(ControlChars.STX);
       if (textLines.isEmpty()) {
@@ -348,88 +287,50 @@ public class TypeBMessageBuilder {
       }
     }
 
-    for (String raw : postTextRaw) {
-      sb.append(raw);
-    }
-    String out = sb.toString();
-    if (LOG.isInfoEnabled()) {
-      LOG.info("[TypeB] Composed (tokens)\n{}", visualizeTokens(out));
-      LOG.debug("[TypeB] Composed (escaped) \"{}\"", visualizeEscaped(out));
-    }
-    return out;
+    for (String raw : postTextRaw) sb.append(raw);
+
+    return sb.toString();
   }
 
-  private String craftedSummary() {
-    StringBuilder sb = new StringBuilder();
-    sb.append("SOA=").append(soa == null ? "null" : soa.name())
-        .append(", EOA=").append(eoa == null ? "null" : eoa.name())
-        .append(", heading=").append(heading)
-        .append(", diversionRI=").append(diversionRoutingIndicator)
-        .append(", originator=").append(originatorIndicator)
-        .append(", doubleSig=").append(doubleSignature)
-        .append(", msgId=").append(messageIdentity)
-        .append(", emitTextDelims=").append(emitTextDelimiters)
-        .append(", emitUS=").append(emitSpacingUS)
-        .append(", firstAddressOverride=").append(firstAddressOverrideRaw);
-    sb.append("\nAddresses:");
-    int i = 0;
-    for (AddressEntry e : addresses) {
-      sb.append("\n  ").append(++i).append(". ").append(e.kind).append(" -> ").append(e.line);
+  // Logging helpers
+  public static String visualizeTokens(String s) {
+    if (s == null) return "null";
+    StringBuilder b = new StringBuilder();
+    for (char c : s.toCharArray()) {
+      if(c=='\r') b.append("<CR>");
+      else if(c=='\n') b.append("<LF>");
+      else if(c==0x01) b.append("<SOH>");
+      else if(c==0x02) b.append("<STX>");
+      else if(c==0x03) b.append("<ETX>");
+      else if(c==0x1F) b.append("<US>");
+      else if(c==0x1A) b.append("<SUB>");
+      else b.append(c);
     }
-    sb.append("\nTextLines:");
-    i = 0;
-    for (String t : textLines) {
-      sb.append("\n  ").append(++i).append(". ").append(t);
-    }
-    sb.append("\npreTextRaw=").append(preTextRaw.size())
-        .append(", postTextRaw=").append(postTextRaw.size());
-    String out = sb.toString();
-    if (LOG.isInfoEnabled()) {
-      LOG.info("[TypeB] Composed (tokens)\n{}", visualizeTokens(out));
-      LOG.debug("[TypeB] Composed (escaped) \"{}\"", visualizeEscaped(out));
-    }
-    return out;
+    return b.toString();
+  }
+
+  public static String visualizeEscaped(String s) {
+    if (s == null) return "null";
+    return s.replace("\r", "\\r").replace("\n", "\\n");
   }
 
   public enum AddressEoaToken {
-    SUB {
-      public String sequence() {
-        return ControlChars.SUB;
-      }
-    },
-    DOT {
-      public String sequence() {
-        return ControlChars.CRLF + ControlChars.DOT;
-      }
-    };
+    SUB { public String sequence() { return ControlChars.SUB; } },
+    DOT { public String sequence() { return ControlChars.CRLF + ControlChars.DOT; } };
 
     public static AddressEoaToken parse(String value) {
-      if (value == null || value.isBlank()) {
-        return DOT;
-      }
-      String v = value.trim();
-      String u = v.toUpperCase(Locale.ROOT);
-      if (u.equals("DOT") || u.equals("CRLF+DOT") || v.equals(ControlChars.CRLF + ControlChars.DOT) || v.equals(".")) {
-        return DOT;
-      }
-      if (u.equals("SUB") || u.equals("CRLF+SUB") || v.equals(ControlChars.SUB) || v.equals(ControlChars.CRLF + ControlChars.SUB)) {
-        return SUB;
-      }
+      if (value == null || value.isBlank()) return DOT;
+      String v = value.trim().toUpperCase(Locale.ROOT);
+      if (v.contains("SUB")) return SUB;
       return DOT;
     }
-
     public abstract String sequence();
   }
 
   private static final class AddressEntry {
     final Kind kind;
     final String line;
-
-    AddressEntry(Kind kind, String line) {
-      this.kind = kind;
-      this.line = line;
-    }
-
+    AddressEntry(Kind kind, String line) { this.kind = kind; this.line = line; }
     enum Kind { PILOT, ADDRESS }
   }
 }

@@ -15,7 +15,6 @@ import java.util.Map;
 public final class HeadingBuilderUtils {
 
   private HeadingBuilderUtils() {
-    // utility class
   }
 
   public static void applyField(
@@ -49,15 +48,9 @@ public final class HeadingBuilderUtils {
     }
   }
 
-  /**
-   * Convenience helper that:
-   *  - creates a builder
-   *  - applies all mapped values
-   *  - returns the built heading line.
-   */
   public static String buildHeading(Map<String, String> fieldValues) {
     TypeBMessageBuilder builder = new TypeBMessageBuilder();
     applyAll(builder, fieldValues);
-    return builder.build(); // heading-only
+    return builder.compose();
   }
 }

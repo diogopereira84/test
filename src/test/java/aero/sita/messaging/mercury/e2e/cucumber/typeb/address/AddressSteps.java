@@ -11,15 +11,11 @@ package aero.sita.messaging.mercury.e2e.cucumber.typeb.address;
 
 import aero.sita.messaging.mercury.e2e.cucumber.typeb.common.CommonTypeBWorld;
 import io.cucumber.datatable.DataTable;
-import io.cucumber.java.en.And;
 import io.cucumber.java.en.Given;
 import io.cucumber.java.en.Then;
 import io.cucumber.java.en.When;
 import java.util.Map;
 
-/**
- * Address-specific steps.
- */
 public class AddressSteps {
   private final CommonTypeBWorld common;
 
@@ -31,11 +27,8 @@ public class AddressSteps {
   public void routingTable(DataTable table) {
     for (Map<String, String> row : table.asMaps(String.class, String.class)) {
       String rt = row.get("RouteType");
-      String ad = row.get("Address");
       String dest = row.get("Destination");
       String conn = row.get("Connection");
-      String out = row.get("OutQueue");
-
 
       if (rt != null) {
         common.routingDestination.put(rt.toUpperCase(), dest);
@@ -44,10 +37,8 @@ public class AddressSteps {
     }
   }
 
-  // Thens
   @Then("the Address Section is detected")
   public void addressSectionDetected() {
-
   }
 
   @Then("the message is accepted")
@@ -87,7 +78,6 @@ public class AddressSteps {
   public void nalIsLastElement() {
   }
 
-  // New assertions from typeb_format
   @Then("the diversion line for {string} is present")
   public void diversionPresent(String ri7) {
   }
@@ -114,13 +104,5 @@ public class AddressSteps {
 
   @When("I send the composed message via the Test Harness")
   public void iSendTheComposedMessageViaTheTestHarness() {
-  }
-
-  @And("the message {string} contains SOA")
-  public void theMessageContainsSOA(String arg0) {
-  }
-
-  @And("the pre-SOA content is {string}")
-  public void thePreSOAContentIs(String preSOAType) {
   }
 }

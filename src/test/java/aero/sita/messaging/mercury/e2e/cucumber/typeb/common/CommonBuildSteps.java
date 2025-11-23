@@ -12,16 +12,12 @@ package aero.sita.messaging.mercury.e2e.cucumber.typeb.common;
 import aero.sita.messaging.mercury.e2e.utilities.format.typeb.ControlChars;
 import aero.sita.messaging.mercury.e2e.utilities.format.typeb.TypeBMessageBuilder;
 import com.fasterxml.jackson.core.JsonProcessingException;
-import io.cucumber.java.en.And;
 import io.cucumber.java.en.Given;
 import io.cucumber.java.en.Then;
 import org.junit.jupiter.api.Assertions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-/**
- * Generic Given/Then for building Type-B messages.
- */
 public class CommonBuildSteps {
   private static final Logger LOG = LoggerFactory.getLogger(CommonBuildSteps.class);
   private final CommonTypeBWorld common;
@@ -30,7 +26,6 @@ public class CommonBuildSteps {
     this.common = world;
   }
 
-  // Given (build)
   @Given("a clean TypeBComposer")
   public void cleanComposer() {
     common.ctx.reset();
@@ -42,10 +37,7 @@ public class CommonBuildSteps {
     common.ctx.withSoa(soa).withEoa(eoa);
   }
 
-  @Given("I set heading {string}")
-  public void setHeading(String h) {
-    common.ctx.withHeading(h);
-  }
+  // NOTE: "I set heading {string}" was moved to HeadingSteps to avoid duplication
 
   @Given("I set diversion routing indicator {string}")
   public void setDri(String ri7) {
@@ -55,7 +47,7 @@ public class CommonBuildSteps {
   @Given("emit spacing US {string}")
   public void emitUS(String on) {
     common.ctx.emitSpacingUS(Boolean.parseBoolean(on));
-  } // why: optional spacing signal
+  }
 
   @Given("I set originator {string} and identity {string}")
   public void setOriginator(String oi, String id) {
@@ -80,7 +72,7 @@ public class CommonBuildSteps {
   @Given("add SAL line {string}")
   public void addSalCompat(String line) {
     common.ctx.withAddressLine(line);
-  } // why: SAL/NAL backend-only
+  }
 
   @Given("add NAL line {string}")
   public void addNalCompat(String line) {
@@ -104,11 +96,10 @@ public class CommonBuildSteps {
 
   @Given("I craft a raw message with heading {string} and first address element {string} without SOA and with EOA {string}")
   public void rawHeadingFirstElemNoSoa(String heading, String firstElem, String eoaToken) {
-    // Why: validate rule "first element may only omit SOA when there is NO heading"
     String eoa = TypeBMessageBuilder.AddressEoaToken.parse(eoaToken).sequence();
     common.output =
         heading + ControlChars.CRLF + firstElem + eoa + "LKYSOLT 3456700" + ControlChars.CRLF + ControlChars.STX + "UAT Validation" + ControlChars.CRLF +
-            ControlChars.ETX; // no SOA before first address line
+            ControlChars.ETX;
   }
 
   @Given("I craft a raw message without any Address Section")
@@ -130,20 +121,25 @@ public class CommonBuildSteps {
         ControlChars.CRLF + ControlChars.ETX;
   }
 
+  /**
+   * Finalizes the message and logs visual + plaintext output.
+   */
   @Given("I finalize the composed message")
   public void finalizeCompose() throws JsonProcessingException {
     boolean hadRaw = common.output != null && !common.output.isEmpty();
     if (!hadRaw) {
       common.output = common.ctx.compose();
-    } else {
-      String visual = common.escaped();
-      String escaped = common.escapedJson();
-      LOG.info("[TypeB] COMPOSED (tokens) {}", visual);
-      LOG.debug("[TypeB] COMPOSED (escaped) \"{}\"", escaped);
     }
+
+    String visual = common.escaped();
+    String plaintext = common.escapedJson();
+
+    LOG.info("----------------------------------------------------------------");
+    LOG.info("[TypeB] COMPOSED (visual): {}", visual);
+    LOG.info("[TypeB] COMPOSED (plaintext): {}", plaintext);
+    LOG.info("----------------------------------------------------------------");
   }
 
-  // Negative raw craft helpers used by features
   @Given("I craft a raw message with an address element followed by stray text {string} between EOA and the next SOA")
   public void rawWithStrayTextBetweenElements(String stray) {
     String soa = common.soaSeq(), eoa = common.eoaSeq();
@@ -180,7 +176,6 @@ public class CommonBuildSteps {
     }
   }
 
-  // Then (utilities)
   @Then("print visualized output")
   public void printEscaped() {
   }
@@ -192,22 +187,7 @@ public class CommonBuildSteps {
     Assertions.assertTrue(esc.contains("<ETX>"), esc);
   }
 
-  // Utility no-op for Scenario Outline placeholders
   @Given("NOOP")
   public void noop() {
-    /* intentionally empty */
-  }
-
-  @Then("the overall disposition is {string}")
-  public void theOverallDispositionIs(String arg0) {
-  }
-
-  @And("the heading detection result is {string}")
-  public void theHeadingDetectionResultIs(String arg0) {
-    
-  }
-
-  @And("if rejected the reason is {string}")
-  public void ifRejectedTheReasonIs(String arg0) {
   }
 }
