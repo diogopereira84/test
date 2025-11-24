@@ -13,16 +13,14 @@ import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoDatabase;
 import com.mongodb.client.model.Filters;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
 import org.bson.Document;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
-/**
- * Generic helper for retrieving specific data nodes from MongoDB.
- * Designed to be decoupled and flexible for any Database/Collection/Field lookup.
- */
 @Slf4j
 @Component
 public class MongoGenericHelper {
@@ -34,17 +32,6 @@ public class MongoGenericHelper {
     this.mongoClient = mongoClient;
   }
 
-  /**
-   * Retrieves a specific field value from a MongoDB document.
-   * Supports dot notation for nested fields (e.g., "errors.0.errorCode").
-   *
-   * @param databaseName   The name of the database (e.g., "configuration")
-   * @param collectionName The name of the collection (e.g., "routes")
-   * @param filterField    The field to filter by (e.g., "criteria.addressMatcher")
-   * @param filterValue    The value to match in the filter field
-   * @param targetField    The field to retrieve (e.g., "destinationIds")
-   * @return The value of the target field, or null if not found
-   */
   public Object getField(String databaseName, String collectionName, String filterField, Object filterValue, String targetField) {
     try {
       MongoDatabase db = mongoClient.getDatabase(databaseName);
@@ -67,35 +54,66 @@ public class MongoGenericHelper {
   }
 
   /**
-   * Helper to traverse nested documents or lists using dot notation.
+   * Helper to traverse nested documents using dot notation.
+   * Supports:
+   * 1. Standard nesting: "originator.address"
+   * 2. Array index: "errors.0.errorCode"
+   * 3. Array projection: "statusLogs.status" (Returns list of all statuses)
    */
-  private Object extractField(Document doc, String path) {
+  private Object extractField(Object current, String path) {
+    if (current == null) return null;
+
     if (!path.contains(".")) {
-      return doc.get(path);
+      return getSingleValue(current, path);
     }
 
-    String[] parts = path.split("\\.");
-    Object current = doc;
+    String[] parts = path.split("\\.", 2);
+    String currentPart = parts[0];
+    String remainingPart = parts[1];
 
-    for (String part : parts) {
-      if (current instanceof Document) {
-        current = ((Document) current).get(part);
-      } else if (current instanceof List) {
-        try {
-          int index = Integer.parseInt(part);
-          current = ((List<?>) current).get(index);
-        } catch (NumberFormatException | IndexOutOfBoundsException e) {
-          return null;
+    Object nextObject = getSingleValue(current, currentPart);
+
+    // Recursive call
+    return extractField(nextObject, remainingPart);
+  }
+
+  private Object getSingleValue(Object current, String key) {
+    if (current instanceof Document) {
+      return ((Document) current).get(key);
+    }
+    else if (current instanceof List) {
+      List<?> list = (List<?>) current;
+
+      // Case A: Explicit Index (e.g., "0", "1")
+      if (isInteger(key)) {
+        int index = Integer.parseInt(key);
+        if (index >= 0 && index < list.size()) {
+          return list.get(index);
         }
-      } else {
         return null;
       }
 
-      if (current == null) {
-        return null;
+      // Case B: Projection (Map over the list)
+      // e.g. list of statusLogs, key is "status" -> return list of statuses
+      List<Object> projected = new ArrayList<>();
+      for (Object item : list) {
+        if (item instanceof Document) {
+          Object val = ((Document) item).get(key);
+          if (val != null) projected.add(val);
+        }
       }
+      return projected;
     }
 
-    return current;
+    return null;
+  }
+
+  private boolean isInteger(String s) {
+    try {
+      Integer.parseInt(s);
+      return true;
+    } catch (NumberFormatException e) {
+      return false;
+    }
   }
 }
