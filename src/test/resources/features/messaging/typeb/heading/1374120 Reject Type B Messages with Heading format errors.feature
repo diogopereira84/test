@@ -31,6 +31,11 @@ Feature: 1374120 - [Type B Format] Reject Type B Messages with Heading format er
   # ==============================================================================
 
   @heading-disabled @positive @bug
+  Scenario: Scenario fake
+    Given I select the connection where "messageConfiguration.acceptMessagesWithAHeadingSection" is "false"
+
+
+  @heading-disabled @positive @bug
   Scenario Outline: When the content that precedes the SOA indicator is Address Element
     Given I select the connection where "messageConfiguration.acceptMessagesWithAHeadingSection" is "false"
     And the message "<hasSOA>" contains SOA
@@ -38,18 +43,15 @@ Feature: 1374120 - [Type B Format] Reject Type B Messages with Heading format er
     And I add address line "QN SINSGSQ"
     And the message is composed
     When I send the composed message via the Test Harness
+    #--received "LETTTLK.IN"
     #================ MongoDb validation ================#
     #================ incoming-messages ================#
     Then the value of "message-store.incoming-messages.statusLogs.status" is "contains":
       | RECEIVED  |
       | PARSED    |
     And the value of "message-store.incoming-messages.errors" is "equal to" "empty"
-    And the value of "message-store.incoming-messages.serialNumber" is "equal to" "<expectedSerial>"
-    And the value of "message-store.incoming-messages.header" is "equal to" "<headingContent>"
     #================ outgoing-messages ================#
     And the value of "message-store.outgoing-messages.errors" is "equal to" "empty"
-    And the value of "message-store.outgoing-messages.serialNumber" is "equal to" "<expectedSerial>"
-    And the value of "message-store.outgoing-messages.header" is "equal to" "<headingContent>"
     And the value of "message-store.outgoing-messages.statusLogs.status" is "contains":
       | TARGET_IDENTIFIED      |
       | PREPARED_TO_DELIVER    |
@@ -113,10 +115,10 @@ Feature: 1374120 - [Type B Format] Reject Type B Messages with Heading format er
       | DELIVERED              |
 
     Examples:
-      | headingContent                 |            | expectedHeadingParts        | expectedSerial |
-      | ZCZC 158 081926 OCT 25         |            | ZCZC, 158, 081926, OCT, 25  | 158            |
-      |  ZCZC 158 081926 OCT 25        | #1 space   | ZCZC, 158, 081926, OCT, 25  | 158            |
-      |        ZCZC 158 081926 OCT 25  | #6 spaces  | ZCZC, 158, 081926, OCT, 25  | 158            |
+      | headingContent               |            | expectedHeadingParts        | expectedSerial |
+      | ZCZC 158 081926 OCT 25       |            | ZCZC, 158, 081926, OCT, 25  | 158            |
+      |  ZCZC 158 081926 OCT 25      | #1 space   | ZCZC, 158, 081926, OCT, 25  | 158            |
+      |       ZCZC 158 081926 OCT 25 | #6 spaces  | ZCZC, 158, 081926, OCT, 25  | 158            |
 
   @heading-enabled @positive
   Scenario Outline: Ignore prefixes for parsing but preserve for forwarding

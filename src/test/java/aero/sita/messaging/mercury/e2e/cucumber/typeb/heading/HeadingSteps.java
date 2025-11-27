@@ -57,7 +57,7 @@ public class HeadingSteps {
     LOG.debug("Set pre-SOA content: {}", content.replace("\r", "\\r").replace("\n", "\\n"));
   }
 
-  @Given("I set heading {string}")
+  @Given("I set heading {visualString}")
   public void setRawHeading(String headingContent) {
     common.ctx.withHeading(headingContent);
   }
