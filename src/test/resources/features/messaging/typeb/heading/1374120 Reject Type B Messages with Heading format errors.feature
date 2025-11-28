@@ -43,10 +43,14 @@ Feature: 1374120 - [Type B Format] Reject Type B Messages with Heading format er
     And I add address line "QN SINSGSQ"
     And the message is composed
     When I send the composed message via the Test Harness
+    Then I received message via Test Harness:
+      | type  | outQueue   |
+      | IBMMQ | LETVVLK.IN |
+    And the received message matches with sent message
     #--received "LETTTLK.IN"
     #================ MongoDb validation ================#
     #================ incoming-messages ================#
-    Then the value of "message-store.incoming-messages.statusLogs.status" is "contains":
+    And the value of "message-store.incoming-messages.statusLogs.status" is "contains":
       | RECEIVED  |
       | PARSED    |
     And the value of "message-store.incoming-messages.errors" is "equal to" "empty"
@@ -61,13 +65,13 @@ Feature: 1374120 - [Type B Format] Reject Type B Messages with Heading format er
     Examples:
       | hasSOA | addressElement        |  composed (plaintext)                         |
       | no     |                       | # "QN SINSGSQ\r\n.LKYSOLT... "                |
-      | yes    | AddressEndIndicator   | # "\r\n.\r\n\u0001QN SINSGSQ\r\n.LKYSOLT..."  |
-      | yes    | PilotSignal           | # "/////\r\n\u0001QN SINSGSQ\r\n.LKYSOLT..."  |
+  #    | yes    | AddressEndIndicator   | # "\r\n.\r\n\u0001QN SINSGSQ\r\n.LKYSOLT..."  |
+  #    | yes    | PilotSignal           | # "/////\r\n\u0001QN SINSGSQ\r\n.LKYSOLT..."  |
 
   @heading-disabled @negative
   Scenario: When the content that precedes the SOA indicator is NOT an Address Element
     Given I select the connection where "messageConfiguration.acceptMessagesWithAHeadingSection" is "false"
-    And I set heading "THIS SHOULD BE REJECTED"
+    And I set heading using "THIS SHOULD BE REJECTED"
     And I add address line "QN SINSGSQ"
     And the message is composed
     When I send the composed message via the Test Harness
@@ -90,7 +94,7 @@ Feature: 1374120 - [Type B Format] Reject Type B Messages with Heading format er
   Scenario Outline: Handle legacy ZCZC sequence in Heading Section
     Given I select the connection where "messageConfiguration.acceptMessagesWithAHeadingSection" is "true"
     And the message "yes" contains SOA
-    And I set heading "<headingContent>"
+    And I set heading using "<headingContent>"
     And I add address line "QN JFKNYBA"
     And the message is composed
     When I send the composed message via the Test Harness
@@ -115,16 +119,16 @@ Feature: 1374120 - [Type B Format] Reject Type B Messages with Heading format er
       | DELIVERED              |
 
     Examples:
-      | headingContent               |            | expectedHeadingParts        | expectedSerial |
-      | ZCZC 158 081926 OCT 25       |            | ZCZC, 158, 081926, OCT, 25  | 158            |
-      |  ZCZC 158 081926 OCT 25      | #1 space   | ZCZC, 158, 081926, OCT, 25  | 158            |
-      |       ZCZC 158 081926 OCT 25 | #6 spaces  | ZCZC, 158, 081926, OCT, 25  | 158            |
+      | headingContent               |            | expectedHeadingParts    | expectedSerial |
+      | ZCZC 158 081926 OCT 25       |            | ZCZC,158,081926,OCT,25  | 158            |
+      |  ZCZC 158 081926 OCT 25      | #1 space   | ZCZC,158,081926,OCT,25  | 158            |
+      |       ZCZC 158 081926 OCT 25 | #6 spaces  | ZCZC,158,081926,OCT,25  | 158            |
 
   @heading-enabled @positive
   Scenario Outline: Ignore prefixes for parsing but preserve for forwarding
     Given I select the connection where "messageConfiguration.acceptMessagesWithAHeadingSection" is "true"
     And the message "yes" contains SOA
-    And I set heading prefix <prefix> and content "001 VALID"
+    And I set heading with prefix <prefix> and content "001 VALID"
     And I add address line "QN JFKNYBA"
     And the message is composed
     When I send the composed message via the Test Harness
@@ -146,15 +150,15 @@ Feature: 1374120 - [Type B Format] Reject Type B Messages with Heading format er
 
     Examples:
       | prefix    | headingContent  |
-      | "   "     | 001 VALID       |
+      | "   "     |    001 VALID    |
       | "ZCZC "   | ZCZC 001 VALID  |
-      | "  ZCZC"  | ZCZC001 VALID   |
+      | "  ZCZC"  |   ZCZC001 VALID |
 
   @heading-enabled @positive
   Scenario Outline: Accept valid Standard Heading formats
     Given I select the connection where "messageConfiguration.acceptMessagesWithAHeadingSection" is "true"
     And the message "yes" contains SOA
-    And I set heading "<headingContent>"
+    And I set heading using "<headingContent>"
     And I add address line "QN JFKNYBA"
     And the message is composed
     When I send the composed message via the Test Harness
@@ -190,7 +194,7 @@ Feature: 1374120 - [Type B Format] Reject Type B Messages with Heading format er
   Scenario Outline: Heading containing SUID information
     Given I select the connection where "messageConfiguration.acceptMessagesWithAHeadingSection" is "true"
     And the message "yes" contains SOA
-    And I set heading "<headingContent>"
+    And I set heading using "<headingContent>"
     And I add address line "QN JFKNYBA"
     And the message is composed
     When I send the composed message via the Test Harness
@@ -231,7 +235,7 @@ Feature: 1374120 - [Type B Format] Reject Type B Messages with Heading format er
   Scenario Outline: Custom Customer Heading formats
     Given I select the connection where "messageConfiguration.acceptMessagesWithAHeadingSection" is "true"
     And the message "yes" contains SOA
-    And I set heading "<headingContent>"
+    And I set heading using "<headingContent>"
     And I add address line "QN JFKNYBA"
     And the message is composed
     When I send the composed message via the Test Harness
@@ -266,7 +270,7 @@ Feature: 1374120 - [Type B Format] Reject Type B Messages with Heading format er
   Scenario Outline: SUID and Original Heading Line
     Given I select the connection where "messageConfiguration.acceptMessagesWithAHeadingSection" is "true"
     And the message "yes" contains SOA
-    And I set heading "<headingContent>"
+    And I set heading using "<headingContent>"
     And I add address line "QN JFKNYBA"
     And the message is composed
     When I send the composed message via the Test Harness

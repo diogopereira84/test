@@ -276,6 +276,37 @@ public class MessageRetrievalHelper {
   }
 
   /**
+   * Finds a message by queue name AND content.
+   * Useful for ensuring we pick up a specific message (e.g. by Identity)
+   * rather than just the first available message in the queue.
+   *
+   * @param queueName the queue name to search for
+   * @param content   the unique content (Identity) to search for
+   * @return the message, or null if not found within timeout
+   */
+  public ReceivedMessage findMessageByQueueAndContent(String queueName, String content) {
+    log.info("Looking for message in queue: '{}' containing '{}' with polling", queueName, content);
+
+    int timeout = pollingProperties.getMessageRetrieval().getTimeoutSeconds();
+    long interval = pollingProperties.getMessageRetrieval().getIntervalMillis();
+
+    ReceivedMessage message = pollingHelper.poll(
+        () -> findMessageByQueueAndContentLogic(queueName, content),
+        timeout,
+        interval
+    );
+
+    if (message != null) {
+      log.info("Found matching message in queue {}: id={}", queueName, message.getId());
+    } else {
+      log.warn("No message found in queue: {} with content: {} after polling for {} seconds",
+          queueName, content, timeout);
+    }
+
+    return message;
+  }
+
+  /**
    * Finds a message by protocol.
    * <p>
    * REFACTORED: Now uses polling to wait for the message to arrive.
@@ -411,6 +442,26 @@ public class MessageRetrievalHelper {
   }
 
   /**
+   * Core logic for finding a message by queue name AND content (without polling).
+   *
+   * @param queueName the queue name to search for
+   * @param content   the content to search for
+   * @return the message, or null if not found
+   */
+  private ReceivedMessage findMessageByQueueAndContentLogic(String queueName, String content) {
+    List<ReceivedMessage> receivedMessages = getAllReceivedMessages();
+
+    Optional<ReceivedMessage> message = receivedMessages.stream()
+        .filter(msg ->
+            (msg.getQueueName() != null && msg.getQueueName().equals(queueName)) &&
+                (msg.getBody() != null && msg.getBody().contains(content))
+        )
+        .findFirst();
+
+    return message.orElse(null);
+  }
+
+  /**
    * Core logic for finding a message by protocol (without polling).
    * This method is called by the polling helper.
    *
@@ -473,4 +524,3 @@ public class MessageRetrievalHelper {
     log.debug("======================================================================");
   }
 }
-

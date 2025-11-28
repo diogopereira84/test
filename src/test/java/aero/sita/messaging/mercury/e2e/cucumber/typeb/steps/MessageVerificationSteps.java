@@ -11,12 +11,16 @@ package aero.sita.messaging.mercury.e2e.cucumber.typeb.steps;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import aero.sita.messaging.mercury.e2e.cucumber.typeb.common.CommonTypeBWorld;
 import aero.sita.messaging.mercury.e2e.cucumber.utilities.parser.RejectMessageBodyParser;
 import aero.sita.messaging.mercury.e2e.model.testharness.rejection.RejectMessageBody;
 import aero.sita.messaging.mercury.e2e.model.testharness.response.ReceivedMessage;
 import aero.sita.messaging.mercury.e2e.utilities.helper.MessageRetrievalHelper;
+import io.cucumber.datatable.DataTable;
+import io.cucumber.java.en.And;
 import io.cucumber.java.en.Then;
 import java.util.List;
+import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 
@@ -38,6 +42,12 @@ public class MessageVerificationSteps {
 
   @Autowired
   private MessageRetrievalHelper messageRetrievalHelper;
+
+  @Autowired
+  private CommonTypeBWorld commonWorld;
+
+  @Autowired
+  private CommonSteps commonSteps; // Injected to access generated MessageIdentity
 
   private ReceivedMessage currentReceivedMessage;
 
@@ -178,6 +188,78 @@ public class MessageVerificationSteps {
 
     // Delegate to the table-based method with a single error
     theMessageContainsTheFollowingErrors(List.of(expectedErrorCode));
+  }
+
+  /**
+   * Checks if a message was received via Test Harness in a specific queue.
+   * If Message Identity is available in context, it uses it to filter the messages.
+   *
+   * @param table DataTable containing 'type' and 'outQueue'
+   */
+  @Then("I received message via Test Harness:")
+  public void thenReceivedMessageViaTestHarness(DataTable table) {
+    List<Map<String, String>> rows = table.asMaps(String.class, String.class);
+    if (rows.isEmpty()) {
+      throw new IllegalArgumentException("DataTable must contain at least one row with 'type' and 'outQueue'");
+    }
+
+    Map<String, String> row = rows.getFirst();
+    String type = row.get("type");
+    String outQueue = row.get("outQueue");
+
+    // Get the identity of the message sent in this scenario
+    String expectedIdentity = commonSteps.getMessageIdentity();
+
+    log.info("Verifying message receipt via Test Harness. Type: {}, OutQueue: {}, Identity: {}",
+        type, outQueue, expectedIdentity);
+
+    if (expectedIdentity == null || expectedIdentity.isEmpty()) {
+      log.warn("No Message Identity found in context. Falling back to simple queue search (may find stale messages).");
+      currentReceivedMessage = messageRetrievalHelper.findMessageByQueueName(outQueue);
+    } else {
+      // Precise lookup: Queue + Identity
+      currentReceivedMessage = messageRetrievalHelper.findMessageByQueueAndContent(outQueue, expectedIdentity);
+    }
+
+    assertThat(currentReceivedMessage)
+        .as("No message found in queue '%s' with identity '%s' via Test Harness", outQueue, expectedIdentity)
+        .isNotNull();
+
+    // Validate the protocol if provided
+    if (type != null && !type.isEmpty()) {
+      assertThat(currentReceivedMessage.getProtocol())
+          .as("Received message protocol mismatch")
+          .isEqualTo(type);
+    }
+
+    log.info("Successfully received message ID: {} from queue: {}", currentReceivedMessage.getId(), outQueue);
+  }
+
+  /**
+   * Compares the received message body with the sent message stored in the context.
+   */
+  @And("the received message matches with sent message")
+  public void theReceivedMessageMatchesWithSentMessage() {
+    assertThat(currentReceivedMessage)
+        .as("No received message available for comparison. Ensure 'I received message via Test Harness' was called first.")
+        .isNotNull();
+
+    String sentMessage = commonWorld.output;
+    assertThat(sentMessage)
+        .as("No sent message found in context. Ensure a message was composed and sent.")
+        .isNotNull()
+        .isNotEmpty();
+
+    String receivedBody = currentReceivedMessage.getBody();
+    log.debug("Comparing messages.\nSent:\n{}\nReceived:\n{}", sentMessage, receivedBody);
+
+    // Using contains to be tolerant of potential wrappers or extra metadata,
+    // while ensuring the original Type B content is present.
+    assertThat(receivedBody)
+        .as("The received message body does not match the sent message")
+        .contains(sentMessage);
+
+    log.info("Received message content matches the sent message.");
   }
 
   /**
