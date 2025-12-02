@@ -63,49 +63,75 @@ public class MongoAssertionSteps {
   // --- LIST/TABLE ASSERTION ---
   @Then("the value of {string} is {string}:")
   public void verifyMongoFieldList(String path, String operator, DataTable dataTable) {
-    List<String> expectedList = dataTable.asList(String.class);
+    // 1. Prepare Expected Data with quote stripping
+    List<String> expectedList = parseExpectedList(dataTable);
 
-    // 2. Handle CSV support for Scenario Outline Examples (single row with commas)
-    if (expectedList.size() == 1 && expectedList.get(0).contains(",")) {
-      String csv = expectedList.get(0);
-      // REFACTORED: Removed .map(String::trim) so spaces are respected.
-      // "A, B" will now result in ["A", " B"]. Use "A,B" for no spaces.
-      expectedList = Arrays.stream(csv.split(","))
-          .collect(Collectors.toList());
-    }
+    log.info("Assertion (List): Path='{}', Op='{}', Expected={}", path, operator, expectedList);
 
-    Object actualValue = pollingHelper.poll(
-        () -> fetchValue(path),
+    // 2. Delegate "Wait & Retry" logic to PollingHelper
+    pollingHelper.pollUntilAsserted(
+        () -> executeListAssertion(path, operator, expectedList),
         pollTimeout,
         pollInterval
     );
+  }
 
-    log.info("Assertion (List): Path='{}', Op='{}', Expected={}, Actual={}",
-        path, operator, expectedList, actualValue);
+  /**
+   * Helper to parse DataTable list, handling CSV splitting and quote stripping.
+   */
+  private List<String> parseExpectedList(DataTable dataTable) {
+    List<String> raw = dataTable.asList(String.class);
+    if (raw.size() == 1 && raw.get(0).contains(",")) {
+      // Split by comma, trim whitespace, and then strip quotes if present
+      // This allows handling " " (space) vs "" (empty) correctly
+      return Arrays.stream(raw.get(0).split(","))
+          .map(String::trim)
+          .map(this::stripQuotes)
+          .collect(Collectors.toList());
+    }
+    return raw;
+  }
 
-    if (!(actualValue instanceof List<?> actualList)) {
-      throw new AssertionError("Expected a List from MongoDB for path '" + path + "' but got: " + (actualValue == null ? "null" : actualValue.getClass().getSimpleName()));
+  /**
+   * Removes surrounding double quotes from a string if present.
+   */
+  private String stripQuotes(String value) {
+    if (value != null && value.length() >= 2 && value.startsWith("\"") && value.endsWith("\"")) {
+      return value.substring(1, value.length() - 1);
+    }
+    return value;
+  }
+
+  private void executeListAssertion(String path, String operator, List<String> expectedList) {
+    Object actualValue = fetchValue(path);
+
+    if (actualValue == null) {
+      throw new AssertionError("Value for path '" + path + "' is null (waiting for data...)");
     }
 
-    List<String> actualStrings = actualList.stream()
+    if (!(actualValue instanceof List<?>)) {
+      throw new AssertionError("Expected a List from MongoDB for path '" + path +
+          "' but got: " + actualValue.getClass().getSimpleName());
+    }
+
+    List<String> actualStrings = ((List<?>) actualValue).stream()
         .map(String::valueOf)
         .collect(Collectors.toList());
+
+    log.debug("Comparing lists: Expected={} vs Actual={}", expectedList, actualStrings);
 
     switch (operator.toLowerCase().replace(" ", "_")) {
       case "equal_to":
       case "equals":
         assertThat(actualStrings).isEqualTo(expectedList);
         break;
-
       case "contains_in_order":
         assertThat(actualStrings).containsSubsequence(expectedList);
         break;
-
       case "contains":
       case "contains_any":
         assertThat(actualStrings).containsAll(expectedList);
         break;
-
       default:
         throw new IllegalArgumentException("Unsupported list operator: " + operator);
     }
@@ -115,9 +141,7 @@ public class MongoAssertionSteps {
 
   private Object fetchValue(String path) {
     String[] parts = path.split("\\.", 3);
-    if (parts.length < 3) {
-      return null;
-    }
+    if (parts.length < 3) return null;
 
     String dbName = parts[0];
     String collectionName = parts[1];
@@ -140,22 +164,18 @@ public class MongoAssertionSteps {
     }
 
     boolean checkEmpty = op.equals("is_empty") || op.equals("empty") ||
-        ((op.equals("equal_to") || op.equals("equals")) && (expected.equalsIgnoreCase("empty") || expected.equals("[]")));
+        ((op.equals("equal_to") || op.equals("equals")) &&
+            (expected.equalsIgnoreCase("empty") || expected.equals("[]") || expected.isEmpty()));
 
     if (checkEmpty) {
-      if (actual == null) {
-        return;
-      }
-      if (actual instanceof List) {
-        assertThat((List<?>) actual).isEmpty();
-      } else if (actual instanceof String) {
-        assertThat((String) actual).isEmpty();
-      }
+      if (actual == null) return;
+      if (actual instanceof List) assertThat((List<?>) actual).isEmpty();
+      else if (actual instanceof String) assertThat((String) actual).isEmpty();
       return;
     }
 
     if (actual == null) {
-      throw new AssertionError("Field is null/missing in MongoDB after polling, but operator '" + operator + "' expects a value.");
+      throw new AssertionError("Field is null/missing in MongoDB after polling.");
     }
 
     if (op.equals("is_not_null")) {
@@ -163,11 +183,8 @@ public class MongoAssertionSteps {
       return;
     }
     if (op.equals("is_not_empty") || op.equals("not_empty")) {
-      if (actual instanceof List) {
-        assertThat((List<?>) actual).isNotEmpty();
-      } else if (actual instanceof String) {
-        assertThat((String) actual).isNotEmpty();
-      }
+      if (actual instanceof List) assertThat((List<?>) actual).isNotEmpty();
+      else if (actual instanceof String) assertThat((String) actual).isNotEmpty();
       return;
     }
 
@@ -190,7 +207,7 @@ public class MongoAssertionSteps {
         if (actual instanceof List<?> list) {
           boolean match = list.stream().map(Object::toString).anyMatch(s -> s.contains(expected));
           assertThat(match)
-              .withFailMessage("List %s does not contain any element matching '%s'", list, expected)
+              .withFailMessage("List %s does not contain matching element '%s'", list, expected)
               .isTrue();
         } else {
           assertThat(actualStr).contains(expected);

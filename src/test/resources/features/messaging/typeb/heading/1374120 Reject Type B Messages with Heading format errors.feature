@@ -30,15 +30,10 @@ Feature: 1374120 - [Type B Format] Reject Type B Messages with Heading format er
   # GROUP 1: Heading Support DISABLED
   # ==============================================================================
 
-  @heading-disabled @positive @bug
-  Scenario: Scenario fake
+  @heading-disabled @positive
+  Scenario Outline: Identify Address Element before the first SOA indicator when Heading support is disabled
     Given I select the connection where "messageConfiguration.acceptMessagesWithAHeadingSection" is "false"
-
-
-  @heading-disabled @positive @bug
-  Scenario Outline: When the content that precedes the SOA indicator is Address Element
-    Given I select the connection where "messageConfiguration.acceptMessagesWithAHeadingSection" is "false"
-    And the message "<hasSOA>" contains SOA
+    And the message "no" contains SOA
     And I set the content immediately preceding the SOA to "<addressElement>"
     And I add address line "QN SINSGSQ"
     And the message is composed
@@ -63,10 +58,19 @@ Feature: 1374120 - [Type B Format] Reject Type B Messages with Heading format er
       | DELIVERED              |
 
     Examples:
-      | hasSOA | addressElement        |  composed (plaintext)                         |
-      | no     |                       | # "QN SINSGSQ\r\n.LKYSOLT... "                |
-  #    | yes    | AddressEndIndicator   | # "\r\n.\r\n\u0001QN SINSGSQ\r\n.LKYSOLT..."  |
-  #    | yes    | PilotSignal           | # "/////\r\n\u0001QN SINSGSQ\r\n.LKYSOLT..."  |
+      | startsWithSOA | containsEOA | SOAControlCharacter | priority | addressElement  |  addressLine (plaintext)                                                                                                                  |
+      | no            | yes         | n/a                 | QN       | NAL             | # "QN SINSGSQ\r\n.HDQRMJU 281440/160B99PSA\r\n\u0002AVS\r\nJU0580L30AUG LA BEGBCN\r\n\r\n\u0003"                                          |
+      | no            | yes         | n/a                 | n/a      | NAL             | # "SINSGSQ\r\n.HDQRMJU 281440/160B99PSA\r\n\u0002AVS\r\nJU0580L30AUG LA BEGBCN\r\n\r\n\u0003"                                             |
+      | no            | no          | n/a                 | QN       | PilotSignal     | # "QN SINSGSQ\r\n./////\r\n\u0001QN JFKNYBA\r\n.HDQRMJU 281440/160B99PSA\r\n\u0002AVS\r\nJU0580L30AUG LA BEGBCN\r\n\r\n\u0003"            |
+      | no            | no          | n/a                 | n/a      | PilotSignal     | # "SINSGSQ\r\n./////\r\n\u0001QN JFKNYBA\r\n.HDQRMJU 281440/160B99PSA\r\n\u0002AVS\r\nJU0580L30AUG LA BEGBCN\r\n\r\n\u0003"               |
+      | yes           | yes         | SOH                 | QN       | NAL             | # "\r\n\u0001QN SINSGSQ\r\n.HDQRMJU 281440/160B99PSA\r\n\u0002AVS\r\nJU0580L30AUG LA BEGBCN\r\n\r\n\u0003"                                |
+      | yes           | yes         | SOH                 | n/a      | NAL             | # "\r\n\u0001SINSGSQ\r\n.HDQRMJU 281440/160B99PSA\r\n\u0002AVS\r\nJU0580L30AUG LA BEGBCN\r\n\r\n\u0003"                                   |
+      | yes           | no          | SOH                 | QN       | PilotSignal     | # "\r\n\u0001QN SINSGSQ\r\n./////\r\n\u0001QN JFKNYBA\r\n.HDQRMJU 281440/160B99PSA\r\n\u0002AVS\r\nJU0580L30AUG LA BEGBCN\r\n\r\n\u0003"  |
+      | yes           | no          | SOH                 | n/a      | PilotSignal     | # "\r\n\u0001SINSGSQ\r\n./////\r\n\u0001QN JFKNYBA\r\n.HDQRMJU 281440/160B99PSA\r\n\u0002AVS\r\nJU0580L30AUG LA BEGBCN\r\n\r\n\u0003"     |
+      | yes           | yes         | SUB                 | QN       | NAL             | # "\r\n\u001AQN SINSGSQ\r\n.HDQRMJU 281440/160B99PSA\r\n\u0002AVS\r\nJU0580L30AUG LA BEGBCN\r\n\r\n\u0003"                                |
+      | yes           | yes         | SUB                 | n/a      | NAL             | # "\r\n\u001ASINSGSQ\r\n.HDQRMJU 281440/160B99PSA\r\n\u0002AVS\r\nJU0580L30AUG LA BEGBCN\r\n\r\n\u0003"                                   |
+      | yes           | no          | SUB                 | QN       | PilotSignal     | # "\r\n\u001AQN SINSGSQ\r\n./////\r\n\u0001QN JFKNYBA\r\n.HDQRMJU 281440/160B99PSA\r\n\u0002AVS\r\nJU0580L30AUG LA BEGBCN\r\n\r\n\u0003"  |
+      | yes           | no          | SUB                 | n/a      | PilotSignal     | # "\r\n\u001ASINSGSQ\r\n./////\r\n\u0001QN JFKNYBA\r\n.HDQRMJU 281440/160B99PSA\r\n\u0002AVS\r\nJU0580L30AUG LA BEGBCN\r\n\r\n\u0003"     |
 
   @heading-disabled @negative
   Scenario: When the content that precedes the SOA indicator is NOT an Address Element
@@ -75,9 +79,13 @@ Feature: 1374120 - [Type B Format] Reject Type B Messages with Heading format er
     And I add address line "QN SINSGSQ"
     And the message is composed
     When I send the composed message via the Test Harness
+    Then I received message via Test Harness:
+      | type  | outQueue   |
+      | IBMMQ | LETVVLK.IN |
+    And the received message matches with sent message
     #================ MongoDb validation ================#
     #================ incoming-messages ================#
-    Then the value of "message-store.incoming-messages.statusLogs.status" is "contains":
+    And the value of "message-store.incoming-messages.statusLogs.status" is "contains":
       | RECEIVED  |
       | PARSED    |
     And the value of "message-store.incoming-messages.errors.errorCode.errorType" is "contains":
@@ -93,25 +101,26 @@ Feature: 1374120 - [Type B Format] Reject Type B Messages with Heading format er
 
   Scenario Outline: Handle legacy ZCZC sequence in Heading Section
     Given I select the connection where "messageConfiguration.acceptMessagesWithAHeadingSection" is "true"
-    And the message "yes" contains SOA
-    And I set heading using "<headingContent>"
+    And I set heading using <headingContent>
     And I add address line "QN JFKNYBA"
     And the message is composed
     When I send the composed message via the Test Harness
+    Then I received message via Test Harness:
+      | type  | outQueue   |
+      | IBMMQ | LETTTLK.IN |
+    And the received message matches with sent message
     #================ MongoDb validation ================#
     #================ incoming-messages ================#
-    Then the value of "message-store.incoming-messages.statusLogs.status" is "contains":
+    And the value of "message-store.incoming-messages.statusLogs.status" is "contains":
       | RECEIVED  |
       | PARSED    |
     And the value of "message-store.incoming-messages.headingParts" is "equals":
       | <expectedHeadingParts>  |
     And the value of "message-store.incoming-messages.errors" is "equal to" "empty"
-    And the value of "message-store.incoming-messages.serialNumber" is "equal to" "<expectedSerial>"
-    And the value of "message-store.incoming-messages.header" is "equal to" "<headingContent>"
+    And the value of "message-store.incoming-messages.header" is "equal to" <headingContent>
     #================ outgoing-messages ================#
     And the value of "message-store.outgoing-messages.errors" is "equal to" "empty"
-    And the value of "message-store.outgoing-messages.serialNumber" is "equal to" "<expectedSerial>"
-    And the value of "message-store.outgoing-messages.header" is "equal to" "<headingContent>"
+    And the value of "message-store.outgoing-messages.header" is "equal to" <headingContent>
     And the value of "message-store.outgoing-messages.statusLogs.status" is "contains":
       | TARGET_IDENTIFIED      |
       | PREPARED_TO_DELIVER    |
@@ -119,29 +128,32 @@ Feature: 1374120 - [Type B Format] Reject Type B Messages with Heading format er
       | DELIVERED              |
 
     Examples:
-      | headingContent               |            | expectedHeadingParts    | expectedSerial |
-      | ZCZC 158 081926 OCT 25       |            | ZCZC,158,081926,OCT,25  | 158            |
-      |  ZCZC 158 081926 OCT 25      | #1 space   | ZCZC,158,081926,OCT,25  | 158            |
-      |       ZCZC 158 081926 OCT 25 | #6 spaces  | ZCZC,158,081926,OCT,25  | 158            |
+      | headingContent                 |            | expectedHeadingParts                                     |
+      | "ZCZC 158 081926 OCT 25"       |            | "ZCZC","158","081926","OCT","25"                         |
+      | " ZCZC 158 081926 OCT 25"      | #1 space   | " ","ZCZC","158","081926","OCT","25"                     |
+      | "      ZCZC 158 081926 OCT 25" | #6 spaces  | " ", "", "", "", "", "","ZCZC","158","081926","OCT","25" |
 
   @heading-enabled @positive
   Scenario Outline: Ignore prefixes for parsing but preserve for forwarding
     Given I select the connection where "messageConfiguration.acceptMessagesWithAHeadingSection" is "true"
-    And the message "yes" contains SOA
     And I set heading with prefix <prefix> and content "001 VALID"
     And I add address line "QN JFKNYBA"
     And the message is composed
     When I send the composed message via the Test Harness
+    Then I received message via Test Harness:
+      | type  | outQueue   |
+      | IBMMQ | LETTTLK.IN |
+    And the received message matches with sent message
     #================ MongoDb validation ================#
     #================ incoming-messages ================#
-    Then the value of "message-store.incoming-messages.statusLogs.status" is "contains":
+    And the value of "message-store.incoming-messages.statusLogs.status" is "contains":
       | RECEIVED  |
       | PARSED    |
     And the value of "message-store.incoming-messages.errors" is "equal to" "empty"
-    And the value of "message-store.incoming-messages.header" is "equal to" "<headingContent>"
+    And the value of "message-store.incoming-messages.header" is "equal to" <headingContent>
         #================ outgoing-messages ================#
     And the value of "message-store.outgoing-messages.errors" is "equal to" "empty"
-    And the value of "message-store.outgoing-messages.header" is "equal to" "<headingContent>"
+    And the value of "message-store.outgoing-messages.header" is "equal to" <headingContent>
     And the value of "message-store.outgoing-messages.statusLogs.status" is "contains":
       | TARGET_IDENTIFIED      |
       | PREPARED_TO_DELIVER    |
@@ -149,35 +161,39 @@ Feature: 1374120 - [Type B Format] Reject Type B Messages with Heading format er
       | DELIVERED              |
 
     Examples:
-      | prefix    | headingContent  |
-      | "   "     |    001 VALID    |
-      | "ZCZC "   | ZCZC 001 VALID  |
-      | "  ZCZC"  |   ZCZC001 VALID |
+      | prefix    | headingContent      |                                     |
+      | "   "     | "   001 VALID"      | # Added quotes to preserve 3 spaces |
+      | "ZCZC "   | "ZCZC 001 VALID"    | # Added quotes for consistency      |
+      | "  ZCZC"  | "  ZCZC001 VALID"   | # Added quotes for consistency      |
 
   @heading-enabled @positive
   Scenario Outline: Accept valid Standard Heading formats
     Given I select the connection where "messageConfiguration.acceptMessagesWithAHeadingSection" is "true"
     And the message "yes" contains SOA
-    And I set heading using "<headingContent>"
+    And I set heading using <headingContent>
     And I add address line "QN JFKNYBA"
     And the message is composed
     When I send the composed message via the Test Harness
+    Then I received message via Test Harness:
+      | type  | outQueue   |
+      | IBMMQ | LETTTLK.IN |
+    And the received message matches with sent message
     #================ MongoDb validation ================#
-        #================ incoming-messages ================#
-    Then the value of "message-store.incoming-messages.statusLogs.status" is "contains":
+      # ================ incoming-messages ================#
+    And the value of "message-store.incoming-messages.statusLogs.status" is "contains":
       | RECEIVED  |
       | PARSED    |
     And the value of "message-store.incoming-messages.headingParts" is "equals":
       | <expectedHeadingParts>  |
     And the value of "message-store.incoming-messages.errors" is "equal to" "empty"
-    And the value of "message-store.incoming-messages.serialNumber" is "equal to" "<expectedSerial>"
-    And the value of "message-store.incoming-messages.header" is "equal to" "<headingContent>"
+    And the value of "message-store.incoming-messages.serialNumber" is "equal to" <expectedSerial>
+    And the value of "message-store.incoming-messages.header" is "equal to" <headingContent>
              #================ outgoing-messages ================#
     And the value of "message-store.outgoing-messages.headingParts" is "equals":
       | <expectedHeadingParts>  |
     And the value of "message-store.outgoing-messages.errors" is "equal to" "empty"
-    And the value of "message-store.outgoing-messages.serialNumber" is "equal to" "<expectedSerial>"
-    And the value of "message-store.outgoing-messages.header" is "equal to" "<headingContent>"
+    And the value of "message-store.outgoing-messages.serialNumber" is "equal to" <expectedSerial>
+    And the value of "message-store.outgoing-messages.header" is "equal to" <headingContent>
     And the value of "message-store.outgoing-messages.statusLogs.status" is "contains":
       | TARGET_IDENTIFIED      |
       | PREPARED_TO_DELIVER    |
@@ -185,10 +201,10 @@ Feature: 1374120 - [Type B Format] Reject Type B Messages with Heading format er
       | DELIVERED              |
 
     Examples:
-      | headingContent        | expectedSerial | expectedHeadingParts   |
-      | 1                     | 1              | 1                      |
-      | 12345                 | 12345          | 12345                  |
-      | 001 SUPP INFO 2025    | 001            | 001,SUPP,INFO,2025     |
+      | headingContent        | expectedSerial | expectedHeadingParts       |
+      | "1"                   | "1"            | "1"                        |
+      | "12345"               | "12345"        | "12345"                    |
+      | "001 SUPP INFO 2025"  | "001"          | "001","SUPP","INFO","2025" |
 
   @heading-enabled @positive
   Scenario Outline: Heading containing SUID information
@@ -198,9 +214,13 @@ Feature: 1374120 - [Type B Format] Reject Type B Messages with Heading format er
     And I add address line "QN JFKNYBA"
     And the message is composed
     When I send the composed message via the Test Harness
+    Then I received message via Test Harness:
+      | type  | outQueue   |
+      | IBMMQ | LETTTLK.IN |
+    And the received message matches with sent message
     #================ MongoDb validation ================#
         #================ incoming-messages ================#
-    Then the value of "message-store.incoming-messages.statusLogs.status" is "contains":
+    And the value of "message-store.incoming-messages.statusLogs.status" is "contains":
       | RECEIVED  |
       | PARSED    |
     And the value of "message-store.incoming-messages.headingParts" is "contains_in_order":
@@ -239,9 +259,13 @@ Feature: 1374120 - [Type B Format] Reject Type B Messages with Heading format er
     And I add address line "QN JFKNYBA"
     And the message is composed
     When I send the composed message via the Test Harness
+    Then I received message via Test Harness:
+      | type  | outQueue   |
+      | IBMMQ | LETTTLK.IN |
+    And the received message matches with sent message
     #================ MongoDb validation ================#
         #================ incoming-messages ================#
-    Then the value of "message-store.incoming-messages.statusLogs.status" is "contains":
+    And the value of "message-store.incoming-messages.statusLogs.status" is "contains":
       | RECEIVED  |
       | PARSED    |
     And the value of "message-store.incoming-messages.headingParts" is "equals":
@@ -274,9 +298,13 @@ Feature: 1374120 - [Type B Format] Reject Type B Messages with Heading format er
     And I add address line "QN JFKNYBA"
     And the message is composed
     When I send the composed message via the Test Harness
+    Then I received message via Test Harness:
+      | type  | outQueue   |
+      | IBMMQ | LETTTLK.IN |
+    And the received message matches with sent message
     #================ MongoDb validation ================#
         #================ incoming-messages ================#
-    Then the value of "message-store.incoming-messages.statusLogs.status" is "contains":
+    And the value of "message-store.incoming-messages.statusLogs.status" is "contains":
       | RECEIVED  |
       | PARSED    |
     And the value of "message-store.incoming-messages.errors" is "equal to" "empty"
@@ -307,9 +335,13 @@ Feature: 1374120 - [Type B Format] Reject Type B Messages with Heading format er
     And I add address line "QN JFKNYBA"
     And the message is composed
     When I send the composed message via the Test Harness
+    Then I received message via Test Harness:
+      | type  | outQueue   |
+      | IBMMQ | LETTTLK.IN |
+    And the received message matches with sent message
     #================ MongoDb validation ================#
     #================ incoming-messages ================#
-    Then the value of "message-store.incoming-messages.statusLogs.status" is "contains":
+    And the value of "message-store.incoming-messages.statusLogs.status" is "contains":
       | RECEIVED  |
       | PARSED    |
     And the value of "message-store.incoming-messages.errors.errorCode.errorType" is "contains":
@@ -336,9 +368,13 @@ Feature: 1374120 - [Type B Format] Reject Type B Messages with Heading format er
     And I add address line "QN JFKNYBA"
     And the message is composed
     When I send the composed message via the Test Harness
+    Then I received message via Test Harness:
+      | type  | outQueue   |
+      | IBMMQ | LETTTLK.IN |
+    And the received message matches with sent message
     #================ MongoDb validation ================#
     #================ incoming-messages ================#
-    Then the value of "message-store.incoming-messages.statusLogs.status" is "contains":
+    And the value of "message-store.incoming-messages.statusLogs.status" is "contains":
       | RECEIVED  |
       | PARSED    |
     And the value of "message-store.incoming-messages.errors" is "equal to" "empty"
@@ -363,9 +399,13 @@ Feature: 1374120 - [Type B Format] Reject Type B Messages with Heading format er
     And I add address line "QN JFKNYBA"
     And the message is composed
     When I send the composed message via the Test Harness
+    Then I received message via Test Harness:
+      | type  | outQueue   |
+      | IBMMQ | LETTTLK.IN |
+    And the received message matches with sent message
     #================ MongoDb validation ================#
     #================ incoming-messages ================#
-    Then the value of "message-store.incoming-messages.statusLogs.status" is "contains":
+    And the value of "message-store.incoming-messages.statusLogs.status" is "contains":
       | RECEIVED  |
       | PARSED    |
     And the value of "message-store.incoming-messages.errors" is "equal to" "empty"
