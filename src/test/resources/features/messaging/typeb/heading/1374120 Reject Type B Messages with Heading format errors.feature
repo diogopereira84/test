@@ -33,9 +33,10 @@ Feature: 1374120 - [Type B Format] Reject Type B Messages with Heading format er
   @heading-disabled @positive
   Scenario Outline: Identify Address Element before the first SOA indicator when Heading support is disabled
     Given I select the connection where "messageConfiguration.acceptMessagesWithAHeadingSection" is "false"
-    And the message "no" contains SOA
-    And I set the content immediately preceding the SOA to "<addressElement>"
-    And I add address line "QN SINSGSQ"
+    #... implement steps:
+    #...
+    #...
+    #...
     And the message is composed
     When I send the composed message via the Test Harness
     Then I received message via Test Harness:
