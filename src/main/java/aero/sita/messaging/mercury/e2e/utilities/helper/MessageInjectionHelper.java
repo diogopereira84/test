@@ -23,7 +23,7 @@ import org.springframework.stereotype.Component;
 
 /**
  * Helper class for message injection operations.
- * Supports both Address-Based Routing and Criteria-Based Routing (Smart Logic).
+ * Supports both Address-Based Routing and Explicit Queue Selection.
  */
 @Slf4j
 @Component
@@ -64,37 +64,20 @@ public class MessageInjectionHelper {
   }
 
   /**
-   * Selects a target queue by finding a connection in MongoDB that matches the criteria.
-   * Example: field="messageConfiguration.acceptMessagesWithAHeadingSection", value="true"
+   * Explicitly sets the target queue for the next injection.
+   * This overrides any smart address-based routing.
+   *
+   * @param queueName the name of the queue to inject into
    */
-  public void setTargetQueueFromConfig(String filterField, String filterValue) {
-    log.info("Smart Logic: Selecting connection where '{}' is '{}'", filterField, filterValue);
-
-    // Handle type conversion (MongoDB stores booleans, Gherkin sends strings)
-    Object typedValue = parseValue(filterValue);
-
-    // Query 'connections' collection to find the 'inQueue' (which corresponds to TestHarness OUT)
-    String foundQueue = (String) mongoHelper.getField(
-        configDbName,
-        "connections",
-        filterField,
-        typedValue,
-        "inQueue" // We want the queue name to inject into
-    );
-
-    if (foundQueue != null) {
-      this.forcedTargetQueue = foundQueue;
-      log.info("Smart Logic: Locked target queue to '{}'", foundQueue);
-    } else {
-      throw new IllegalStateException(String.format(
-          "Smart Logic Failure: No connection found where %s = %s", filterField, filterValue));
-    }
+  public void setForcedTargetQueue(String queueName) {
+    this.forcedTargetQueue = queueName;
+    log.info("Injection Override: Locked target queue to '{}'", queueName);
   }
 
   /**
    * Injects the message.
-   * Priority 1: Use queue explicitly selected via "Given I select connection..."
-   * Priority 2: Resolve queue dynamically based on the destination address in the message.
+   * Priority 1: Use queue explicitly selected via "Given I select connection..." (setForcedTargetQueue)
+   * Priority 2: Resolve queue dynamically based on the destination address in the message (DB lookup).
    */
   public void injectWithSmartRouting(String messageContent) {
     String targetQueue;
@@ -133,16 +116,6 @@ public class MessageInjectionHelper {
   }
 
   // --- Internal Logic ---
-
-  private Object parseValue(String value) {
-    if ("true".equalsIgnoreCase(value)) {
-      return true;
-    }
-    if ("false".equalsIgnoreCase(value)) {
-      return false;
-    }
-    return value;
-  }
 
   private String extractRecipientAddress(String message) {
     Pattern pattern = Pattern.compile("[A-Z]{2}[\\s]+([A-Z0-9]{7})");

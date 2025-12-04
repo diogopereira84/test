@@ -45,9 +45,21 @@ public class MongoAssertionSteps {
   @Value("${polling.message-store.interval.millis:1000}")
   private long pollInterval;
 
+  /**
+   * Property to control execution of detailed validations.
+   * Steps will only execute if mod=UAT.
+   */
+  @Value("${mod:false}")
+  private boolean isUatMode;
+
   // --- SINGLE VALUE ASSERTION ---
   @Then("the value of {string} is {string} {string}")
   public void verifyMongoField(String path, String operator, String expectedValue) {
+    if (!isUatMode) {
+      log.info("Skipping MongoDB validation (Single) for path '{}' because mode '{}' is not 'UAT'", path, isUatMode);
+      return;
+    }
+
     Object actualValue = pollingHelper.poll(
         () -> fetchValue(path),
         pollTimeout,
@@ -63,6 +75,11 @@ public class MongoAssertionSteps {
   // --- LIST/TABLE ASSERTION ---
   @Then("the value of {string} is {string}:")
   public void verifyMongoFieldList(String path, String operator, DataTable dataTable) {
+    if (!isUatMode) {
+      log.info("Skipping MongoDB validation (List) for path '{}' because mode '{}' is not 'UAT'", path, isUatMode);
+      return;
+    }
+
     // 1. Prepare Expected Data with quote stripping
     List<String> expectedList = parseExpectedList(dataTable);
 

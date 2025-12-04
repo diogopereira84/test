@@ -26,52 +26,47 @@ Feature: 1374120 - [Type B Format] Reject Type B Messages with Heading format er
     And I set originator "LKYSOLT" and identity "3456700"
     And I add text line "Standard UAT Body Text"
 
-  # ==============================================================================
-  # GROUP 1: Heading Support DISABLED
-  # ==============================================================================
-
   @heading-disabled @positive
-  Scenario Outline: Identify Address Element before the first SOA indicator when Heading support is disabled
+  Scenario Outline: Enforce SOA presence and placement when a Heading Section is disabled
     Given I select the connection where "messageConfiguration.acceptMessagesWithAHeadingSection" is "false"
-    #... implement steps:
-    #...
-    #...
-    #...
+    And I construct the address element with SOA "<indicatorSOA>", EOA "<containsEOA>", Char "<SOAControlCharacter>", Priority "<priority>", and Type "<addressElement>"
     And the message is composed
     When I send the composed message via the Test Harness
     Then I received message via Test Harness:
       | type  | outQueue   |
       | IBMMQ | LETVVLK.IN |
     And the received message matches with sent message
-    #--received "LETTTLK.IN"
-    #================ MongoDb validation ================#
-    #================ incoming-messages ================#
-    And the value of "message-store.incoming-messages.statusLogs.status" is "contains":
-      | RECEIVED  |
-      | PARSED    |
-    And the value of "message-store.incoming-messages.errors" is "equal to" "empty"
-    #================ outgoing-messages ================#
-    And the value of "message-store.outgoing-messages.errors" is "equal to" "empty"
-    And the value of "message-store.outgoing-messages.statusLogs.status" is "contains":
-      | TARGET_IDENTIFIED      |
-      | PREPARED_TO_DELIVER    |
-      | DISPATCHED             |
-      | DELIVERED              |
 
     Examples:
-      | startsWithSOA | containsEOA | SOAControlCharacter | priority | addressElement  |  addressLine (plaintext)                                                                                                                  |
-      | no            | yes         | n/a                 | QN       | NAL             | # "QN SINSGSQ\r\n.HDQRMJU 281440/160B99PSA\r\n\u0002AVS\r\nJU0580L30AUG LA BEGBCN\r\n\r\n\u0003"                                          |
-      | no            | yes         | n/a                 | n/a      | NAL             | # "SINSGSQ\r\n.HDQRMJU 281440/160B99PSA\r\n\u0002AVS\r\nJU0580L30AUG LA BEGBCN\r\n\r\n\u0003"                                             |
-      | no            | no          | n/a                 | QN       | PilotSignal     | # "QN SINSGSQ\r\n./////\r\n\u0001QN JFKNYBA\r\n.HDQRMJU 281440/160B99PSA\r\n\u0002AVS\r\nJU0580L30AUG LA BEGBCN\r\n\r\n\u0003"            |
-      | no            | no          | n/a                 | n/a      | PilotSignal     | # "SINSGSQ\r\n./////\r\n\u0001QN JFKNYBA\r\n.HDQRMJU 281440/160B99PSA\r\n\u0002AVS\r\nJU0580L30AUG LA BEGBCN\r\n\r\n\u0003"               |
-      | yes           | yes         | SOH                 | QN       | NAL             | # "\r\n\u0001QN SINSGSQ\r\n.HDQRMJU 281440/160B99PSA\r\n\u0002AVS\r\nJU0580L30AUG LA BEGBCN\r\n\r\n\u0003"                                |
-      | yes           | yes         | SOH                 | n/a      | NAL             | # "\r\n\u0001SINSGSQ\r\n.HDQRMJU 281440/160B99PSA\r\n\u0002AVS\r\nJU0580L30AUG LA BEGBCN\r\n\r\n\u0003"                                   |
-      | yes           | no          | SOH                 | QN       | PilotSignal     | # "\r\n\u0001QN SINSGSQ\r\n./////\r\n\u0001QN JFKNYBA\r\n.HDQRMJU 281440/160B99PSA\r\n\u0002AVS\r\nJU0580L30AUG LA BEGBCN\r\n\r\n\u0003"  |
-      | yes           | no          | SOH                 | n/a      | PilotSignal     | # "\r\n\u0001SINSGSQ\r\n./////\r\n\u0001QN JFKNYBA\r\n.HDQRMJU 281440/160B99PSA\r\n\u0002AVS\r\nJU0580L30AUG LA BEGBCN\r\n\r\n\u0003"     |
-      | yes           | yes         | SUB                 | QN       | NAL             | # "\r\n\u001AQN SINSGSQ\r\n.HDQRMJU 281440/160B99PSA\r\n\u0002AVS\r\nJU0580L30AUG LA BEGBCN\r\n\r\n\u0003"                                |
-      | yes           | yes         | SUB                 | n/a      | NAL             | # "\r\n\u001ASINSGSQ\r\n.HDQRMJU 281440/160B99PSA\r\n\u0002AVS\r\nJU0580L30AUG LA BEGBCN\r\n\r\n\u0003"                                   |
-      | yes           | no          | SUB                 | QN       | PilotSignal     | # "\r\n\u001AQN SINSGSQ\r\n./////\r\n\u0001QN JFKNYBA\r\n.HDQRMJU 281440/160B99PSA\r\n\u0002AVS\r\nJU0580L30AUG LA BEGBCN\r\n\r\n\u0003"  |
-      | yes           | no          | SUB                 | n/a      | PilotSignal     | # "\r\n\u001ASINSGSQ\r\n./////\r\n\u0001QN JFKNYBA\r\n.HDQRMJU 281440/160B99PSA\r\n\u0002AVS\r\nJU0580L30AUG LA BEGBCN\r\n\r\n\u0003"     |
+      | indicatorSOA     | containsEOA | SOAControlCharacter | priority | addressElement  | addressLine (plaintext)                                                                                                                   |
+     #| \r\n             | \r\n.       | \u0001 or \u001A    |          |                 |                                                                                                                                           |
+      | no               | yes         | n/a                 | QN       | NAL             | # "QN SINSGSQ\r\n.HDQRMJU 281440/160B99PSA\r\n\u0002AVS\r\nJU0580L30AUG LA BEGBCN\r\n\r\n\u0003"                                          |
+      | no               | yes         | n/a                 | n/a      | NAL             | # "SINSGSQ\r\n.HDQRMJU 281440/160B99PSA\r\n\u0002AVS\r\nJU0580L30AUG LA BEGBCN\r\n\r\n\u0003"                                             |
+      | no               | no          | n/a                 | QN       | PilotSignal     | # "QN SINSGSQ\r\n./////\r\n\u0001QN JFKNYBA\r\n.HDQRMJU 281440/160B99PSA\r\n\u0002AVS\r\nJU0580L30AUG LA BEGBCN\r\n\r\n\u0003"            |
+      | no               | no          | n/a                 | n/a      | PilotSignal     | # "SINSGSQ\r\n./////\r\n\u0001QN JFKNYBA\r\n.HDQRMJU 281440/160B99PSA\r\n\u0002AVS\r\nJU0580L30AUG LA BEGBCN\r\n\r\n\u0003"               |
+
+  @heading-enabled @positive
+  Scenario Outline: Enforce SOA presence and placement when a Heading Section is enabled
+    Given I select the connection where "messageConfiguration.acceptMessagesWithAHeadingSection" is "true"
+    And I construct the address element with SOA "<indicatorSOA>", EOA "<containsEOA>", Char "<SOAControlCharacter>", Priority "<priority>", and Type "<addressElement>"
+    And the message is composed
+    When I send the composed message via the Test Harness
+    Then I received message via Test Harness:
+      | type  | outQueue   |
+      | IBMMQ | LETTTLK.IN |
+    And the received message matches with sent message
+
+    Examples:
+      | indicatorSOA | containsEOA | SOAControlCharacter | priority | addressElement | addressLine (plaintext)                                                                                                                  |
+     #| \r\n         | \r\n.       | \u0001 or \u001A    |          |                |                                                                                                                                          |
+      | yes          | yes         | SOH                 | QN       | NAL            | # "\r\n\u0001QN SINSGSQ\r\n.HDQRMJU 281440/160B99PSA\r\n\u0002AVS\r\nJU0580L30AUG LA BEGBCN\r\n\r\n\u0003"                               |
+      | yes          | yes         | SOH                 | n/a      | NAL            | # "\r\n\u0001SINSGSQ\r\n.HDQRMJU 281440/160B99PSA\r\n\u0002AVS\r\nJU0580L30AUG LA BEGBCN\r\n\r\n\u0003"                                  |
+      | yes          | no          | SOH                 | QN       | PilotSignal    | # "\r\n\u0001QN SINSGSQ\r\n./////\r\n\u0001QN JFKNYBA\r\n.HDQRMJU 281440/160B99PSA\r\n\u0002AVS\r\nJU0580L30AUG LA BEGBCN\r\n\r\n\u0003" |
+      | yes          | no          | SOH                 | n/a      | PilotSignal    | # "\r\n\u0001SINSGSQ\r\n./////\r\n\u0001QN JFKNYBA\r\n.HDQRMJU 281440/160B99PSA\r\n\u0002AVS\r\nJU0580L30AUG LA BEGBCN\r\n\r\n\u0003"    |
+      | yes          | yes         | SUB                 | QN       | NAL            | # "\r\n\u001AQN SINSGSQ\r\n.HDQRMJU 281440/160B99PSA\r\n\u0002AVS\r\nJU0580L30AUG LA BEGBCN\r\n\r\n\u0003"                               |
+      | yes          | yes         | SUB                 | n/a      | NAL            | # "\r\n\u001ASINSGSQ\r\n.HDQRMJU 281440/160B99PSA\r\n\u0002AVS\r\nJU0580L30AUG LA BEGBCN\r\n\r\n\u0003"                                  |
+      | yes          | no          | SUB                 | QN       | PilotSignal    | # "\r\n\u001AQN SINSGSQ\r\n./////\r\n\u0001QN JFKNYBA\r\n.HDQRMJU 281440/160B99PSA\r\n\u0002AVS\r\nJU0580L30AUG LA BEGBCN\r\n\r\n\u0003" |
+      | yes          | no          | SUB                 | n/a      | PilotSignal    | # "\r\n\u001ASINSGSQ\r\n./////\r\n\u0001QN JFKNYBA\r\n.HDQRMJU 281440/160B99PSA\r\n\u0002AVS\r\nJU0580L30AUG LA BEGBCN\r\n\r\n\u0003"    |
 
   @heading-disabled @negative
   Scenario: When the content that precedes the SOA indicator is NOT an Address Element
@@ -83,7 +78,8 @@ Feature: 1374120 - [Type B Format] Reject Type B Messages with Heading format er
     Then I received message via Test Harness:
       | type  | outQueue   |
       | IBMMQ | LETVVLK.IN |
-    And the received message matches with sent message
+    And I request the test harness to retrieve all received messages
+    And the message contains the error "HEADING_SECTION_NOT_ALLOWED"
     #================ MongoDb validation ================#
     #================ incoming-messages ================#
     And the value of "message-store.incoming-messages.statusLogs.status" is "contains":
@@ -324,10 +320,6 @@ Feature: 1374120 - [Type B Format] Reject Type B Messages with Heading format er
       |  SUID JJBLK344Tna8S6o5ZEzSDg EytNEK2HQvKVOAKTofev1A 158 081926 OCT 25             | # SUID with Standard Heading   |
       |  SUID JJBLK344Tna8S6o5ZEzSDg EytNEK2HQvKVOAKTofev1A CUSTOM CUSTOMER HEADING INFO  | # SUID with Custom Heading     |
 
-  # ==============================================================================
-  # GROUP 3: Heading Support ENABLED - Invalid Formats (Negative)
-  # ==============================================================================
-
   @heading-enabled @negative
   Scenario Outline: Multi-line headings
     Given I select the connection where "messageConfiguration.acceptMessagesWithAHeadingSection" is "true"
@@ -339,7 +331,8 @@ Feature: 1374120 - [Type B Format] Reject Type B Messages with Heading format er
     Then I received message via Test Harness:
       | type  | outQueue   |
       | IBMMQ | LETTTLK.IN |
-    And the received message matches with sent message
+    And I request the test harness to retrieve all received messages
+    And the message contains the error "INVALID_HEADING_SECTION"
     #================ MongoDb validation ================#
     #================ incoming-messages ================#
     And the value of "message-store.incoming-messages.statusLogs.status" is "contains":
@@ -404,16 +397,3 @@ Feature: 1374120 - [Type B Format] Reject Type B Messages with Heading format er
       | type  | outQueue   |
       | IBMMQ | LETTTLK.IN |
     And the received message matches with sent message
-    #================ MongoDb validation ================#
-    #================ incoming-messages ================#
-    And the value of "message-store.incoming-messages.statusLogs.status" is "contains":
-      | RECEIVED  |
-      | PARSED    |
-    And the value of "message-store.incoming-messages.errors" is "equal to" "empty"
-        #================ outgoing-messages ================#
-    And the value of "message-store.outgoing-messages.errors" is "equal to" "empty"
-    And the value of "message-store.outgoing-messages.statusLogs.status" is "contains":
-      | TARGET_IDENTIFIED      |
-      | PREPARED_TO_DELIVER    |
-      | DISPATCHED             |
-      | DELIVERED              |

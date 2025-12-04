@@ -9,6 +9,7 @@
 
 package aero.sita.messaging.mercury.e2e.cucumber.typeb.steps.configuration;
 
+import aero.sita.messaging.mercury.e2e.cucumber.typeb.common.ConfigurationWorld;
 import aero.sita.messaging.mercury.e2e.utilities.helper.ConfigurationDbHelper;
 import io.cucumber.datatable.DataTable;
 import io.cucumber.java.en.Given;
@@ -27,6 +28,9 @@ public class ConfigurationVerificationSteps {
   @Autowired
   private ConfigurationDbHelper configurationDbHelper;
 
+  @Autowired
+  private ConfigurationWorld configurationWorld;
+
   private static final Set<String> verifiedCollections = ConcurrentHashMap.newKeySet();
 
   @Given("the configuration data is verified and healthy")
@@ -44,15 +48,28 @@ public class ConfigurationVerificationSteps {
 
   @Given("the {string} collection contains the following documents:")
   public void verifyConfigurationData(String collectionName, DataTable dataTable) {
-    if (verifiedCollections.contains(collectionName)) return;
-
+    // 1. Convert DataTable to List of Maps
     List<Map<String, String>> expectedRows = dataTable.asMaps(String.class, String.class);
-    List<String> errors = configurationDbHelper.validateCollectionContent(collectionName, expectedRows);
 
-    assertThat(errors)
-        .withFailMessage("Data Integrity Mismatches in '%s':\n%s", collectionName, String.join("\n", errors))
-        .isEmpty();
+    // 2. Perform DB Validation (Integrity Check)
+    if (!verifiedCollections.contains(collectionName)) {
+      List<String> errors = configurationDbHelper.validateCollectionContent(collectionName, expectedRows);
+      assertThat(errors)
+          .withFailMessage("Data Integrity Mismatches in '%s':\n%s", collectionName, String.join("\n", errors))
+          .isEmpty();
+      verifiedCollections.add(collectionName);
+    }
 
-    verifiedCollections.add(collectionName);
+    // 3. Store data in ConfigurationWorld for scenario use
+    if (collectionName.contains("connections")) {
+      log.info("Storing 'connections' background data in ConfigurationWorld.");
+      configurationWorld.setConnections(expectedRows);
+    } else if (collectionName.contains("routes")) {
+      log.info("Storing 'routes' background data in ConfigurationWorld.");
+      configurationWorld.setRoutes(expectedRows);
+    } else if (collectionName.contains("destinations")) {
+      log.info("Storing 'destinations' background data in ConfigurationWorld.");
+      configurationWorld.setDestinations(expectedRows);
+    }
   }
 }

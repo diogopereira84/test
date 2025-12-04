@@ -1,14 +1,42 @@
-@ALM432432432434324
 Feature: Type-B Address Section parsing & validation (Req 1374121)
 
   Background:
+    # --- DATA INTEGRITY CHECK ---
+    Given the "configuration.hosts" collection contains the following documents:
+      | _id     | type  | name    | enabled |
+      | server1 | IBMMQ | server1 | true    |
+
+    And the "configuration.connections" collection contains the following documents:
+      | _id             | type  | name             | serviceAddress | format | hostId  | inQueue        | outQueue     | enabled |
+      | lab-connection1 | IBMMQ | lab-connection1  | LKYSOLT        | TYPE_B | server1 | LKYSOLT.OUT    | LKYSOLT.IN   | true    |
+      | lab-connection2 | IBMMQ | lab-connection2  | LKYEDLT        | TYPE_B | server1 | LKYEDLT.OUT    | LKYEDLT.IN   | true    |
+      | lab-connection5 | IBMMQ | lab-connection5  | LETJPLK        | TYPE_B | server1 | LETJPLK.OUT    | LETJPLK.IN   | true    |
+      | lab-connection6 | IBMMQ | lab-connection6  | LETBCLK        | TYPE_B | server1 | LETBCLK.OUT    | LETBCLK.IN   | true    |
+
+    And the "configuration.destinations" collection contains the following documents:
+      | _id          | connectionIds[]  | enabled |
+      | destination3 | lab-connection1  | true    |
+      | destination4 | lab-connection2  | true    |
+      | destination7 | lab-connection5  | true    |
+      | destination8 | lab-connection6  | true    |
+
+    And the "configuration.routes" collection contains the following documents:
+      | _id | type   | criteria.addressMatcher | criteria.type | destinationIds[] | enabled |
+      | 3   | DIRECT | MILXTXS                 | DISCRETE      | destination3     | true    |
+      | 4   | DIRECT | SWIRI1G                 | DISCRETE      | destination4     | true    |
+      | 7   | DIRECT | LKYEGLT                 | DISCRETE      | destination7     | true    |
+      | 8   | DIRECT | LETKJLK                 | DISCRETE      | destination8     | true    |
+
+
+    # --- TEST SETUP ---
     Given a clean TypeBComposer
-    And the configuration has the following routes configured:
-      | RouteType | Address | Destination  | Connection      | OutQueue   |
-      | DIRECT    | SWIRI1G | destination4 | lab-connection2 | LKYEDLT.IN |
-      | DIRECT    | LKYEGLT | destination7 | lab-connection5 | LETJPLK.IN |
-      | DIRECT    | MILXTXS | destination3 | lab-connection1 | LKYSOLT.IN |
-      | DIRECT    | LETKJLK | destination8 | lab-connection6 | LETBCLK.IN |
+    And I set originator "LKYSOLT" and identity "3456700"
+    And I add text line "Standard UAT Body Text"
+
+
+  @positive @overview_matrix
+  Scenario: Test test test
+    Given a clean TypeBComposer
 
   @positive @overview_matrix
   Scenario Outline: Address Section present — NAL mandatory; Pilot/SAL optional; allowed orders
@@ -17,8 +45,6 @@ Feature: Type-B Address Section parsing & validation (Req 1374121)
     And <pilotStep>
     And <salStep>
     And <nalStep>
-    And I set originator "LKYSOLT" and identity "3456700"
-    And I add text line "Test-UAT"
     And the message is composed
     When I send the composed message via the Test Harness
     Then the Address Section is detected
@@ -40,8 +66,6 @@ Feature: Type-B Address Section parsing & validation (Req 1374121)
     And I start composing a Type-B message with SOA "CRLF+SOH" and EOA "DOT"
     And I add address line "<nal>"
     And I add pilot address line "<pilot>" with pilot signal "/////"
-    And I set originator "LKYSOLT" and identity "3456700"
-    And I add text line "Test-UAT"
     And the message is composed
     When I send the composed message via the Test Harness
     Then the message is rejected with reason "INVALID PILOT ADDRESS LINE"
@@ -55,8 +79,6 @@ Feature: Type-B Address Section parsing & validation (Req 1374121)
   Scenario Outline: Accept minimal valid message with a single NAL (various first-element SOA tolerances)
     Given I start composing a Type-B message with SOA "<soaForm>" and EOA "DOT"
     And I add address line "<priority> <riList>"
-    And I set originator "LKYSOLT" and identity "3456700"
-    And I add text line "Test-UAT"
     And the message is composed
     When I send the composed message via the Test Harness
     Then the Address Section is detected
@@ -80,8 +102,6 @@ Feature: Type-B Address Section parsing & validation (Req 1374121)
       # SAL
     And I add address line "QN SWIRI1G LKYEGLT MILXTXS"
       # NAL last
-    And I set originator "LKYSOLT" and identity "3456700"
-    And I add text line "Test-UAT"
     And the message is composed
     When I send the composed message via the Test Harness
     Then the Address Section is detected
@@ -93,8 +113,6 @@ Feature: Type-B Address Section parsing & validation (Req 1374121)
   Scenario Outline: Priority classification (two-letter codes; one-letter defaults to Normal; others → Normal)
     Given I start composing a Type-B message with SOA "CRLF+SOH" and EOA "DOT"
     And I add address line "<priority> SWIRI1G"
-    And I set originator "LKYSOLT" and identity "3456700"
-    And I add text line "Test-UAT"
     And the message is composed
     When I send the composed message via the Test Harness
     Then the message is accepted
@@ -127,8 +145,6 @@ Feature: Type-B Address Section parsing & validation (Req 1374121)
   @negative
   Scenario: INVALID ADDRESS SECTION (text found between EOA and next SOA)
     Given I craft a raw message with an address element followed by stray text "XYZ" between EOA and the next SOA
-    And I set originator "LKYSOLT" and identity "3456700"
-    And I add text line "Test-UAT"
     And the message is composed
     When I send the composed message via the Test Harness
     Then the message is rejected with reason "INVALID ADDRESS SECTION"
@@ -140,8 +156,6 @@ Feature: Type-B Address Section parsing & validation (Req 1374121)
     And I add pilot address line "QN LKYEGLT" with pilot signal "/////"
     And I add address line "QN SWIRI1G"
       # NAL last
-    And I set originator "LKYSOLT" and identity "3456700"
-    And I add text line "Test-UAT"
     And the message is composed
     When I send the composed message via the Test Harness
     Then the message is rejected with reason "TOO MANY PILOT ADDRESS LINE"
@@ -152,8 +166,6 @@ Feature: Type-B Address Section parsing & validation (Req 1374121)
     And I add pilot address line "QN SWIRI1G LKYEGLT" with pilot signal "/////"
     And I add address line "QN SWIRI1G"
       # NAL last (to allow parsing)
-    And I set originator "LKYSOLT" and identity "3456700"
-    And I add text line "Test-UAT"
     And the message is composed
     When I send the composed message via the Test Harness
     Then the message is rejected with reason "PILOT ADDRESS LINE - TOO MANY ADDRESSES"
@@ -163,8 +175,6 @@ Feature: Type-B Address Section parsing & validation (Req 1374121)
     Given I start composing a Type-B message with SOA "CRLF+SOH" and EOA "DOT"
     And I add address line "QN <badToken> SWIRI1G"
       # NAL
-    And I set originator "LKYSOLT" and identity "3456700"
-    And I add text line "Test-UAT"
     And the message is composed
     When I send the composed message via the Test Harness
     Then the message is rejected with reason "INVALID ROUTING INDICATOR ADDRESS - <badToken>"
@@ -180,8 +190,6 @@ Feature: Type-B Address Section parsing & validation (Req 1374121)
   Scenario: TOO MANY ADDRESSESS PER LINE (>8)
     Given I start composing a Type-B message with SOA "CRLF+SOH" and EOA "DOT"
     And I add address line "QN AAAAAAA BBBBBBB CCCCCCC DDDDDDD EEEEEEE FFFFFFF GGGGGGG HHHHHHH IIIIIII"
-    And I set originator "LKYSOLT" and identity "3456700"
-    And I add text line "Test-UAT"
     And the message is composed
     When I send the composed message via the Test Harness
     Then the message is rejected with reason "TOO MANY ADDRESSESS PER LINE"
@@ -194,8 +202,6 @@ Feature: Type-B Address Section parsing & validation (Req 1374121)
     And I add address line "AAAAAAA BBBBBBB CCCCCCC DDDDDDD EEEEEEE FFFFFFF GGGGGGG HHHHHHH"
     And I add address line "AAAAAAA BBBBBBB CCCCCCC DDDDDDD EEEEEEE FFFFFFF GGGGGGG HHHHHHH"
     And I add address line "AAAAAAA BBBBBBB"
-    And I set originator "LKYSOLT" and identity "3456700"
-    And I add text line "Test-UAT"
     And the message is composed
     When I send the composed message via the Test Harness
     Then the message is rejected with reason "TOO MANY ADDRESS LINES"
@@ -205,8 +211,6 @@ Feature: Type-B Address Section parsing & validation (Req 1374121)
     Given a clean TypeBComposer
     And I start composing a Type-B message with SOA "<soa>" and EOA "DOT"
     And I add address line "QD SWIRI1G"
-    And I set originator "LKYSOLT" and identity "3456700"
-    And I add text line "FSU/15"
     And the message is composed
     When I send the composed message via the Test Harness
     Then the Address Section is detected
@@ -220,8 +224,6 @@ Feature: Type-B Address Section parsing & validation (Req 1374121)
   Scenario: First element without complete SOA when no heading (accepted)
     Given I craft a raw message starting directly with "QN SWIRI1G" with no heading, no CRLF prefix
     And I append the correct EOA for the element
-    And I set originator "LKYSOLT" and identity "3456700"
-    And I add text line "FSU/15"
     And the message is composed
     When I send the composed message via the Test Harness
     Then the Address Section is detected
@@ -231,8 +233,6 @@ Feature: Type-B Address Section parsing & validation (Req 1374121)
   Scenario: Recipients are uppercased at parse time
     Given a clean TypeBComposer
     And I add address line "qn swiri1g lkyeglt"
-    And I set originator "LKYSOLT" and identity "3456700"
-    And I add text line "FSU/15"
     And the message is composed
     When I send the composed message via the Test Harness
     Then the list of recipients extracted equals "SWIRI1G LKYEGLT"
@@ -244,8 +244,6 @@ Feature: Type-B Address Section parsing & validation (Req 1374121)
     Given Heading line is "719"
     And I add address line "QD SWIRI1G MILXTXS"
     Given I craft a raw message with heading "719" and first address element "QD MSPFMPO BRUACER" without SOA and with EOA "DOT"
-    And I set originator "LKYSOLT" and identity "3456700"
-    And I add text line "FSU/15"
     And the message is composed
     When I send the composed message via the Test Harness
     Then the message is rejected with reason "ADDRESS SECTION NOT FOUND"
@@ -254,8 +252,6 @@ Feature: Type-B Address Section parsing & validation (Req 1374121)
   Scenario: Routing resolution still executes even if unrelated Address Section errors exist
     Given a clean TypeBComposer
     And I add address line "QD SWIRI1G ASAFX"
-    And I set originator "LKYSOLT" and identity "3456700"
-    And I add text line "FSU/15"
     And the message is composed
     When I send the composed message via the Test Harness
     Then the message is rejected with reason "INVALID ROUTING INDICATOR ADDRESS - ASAFX"

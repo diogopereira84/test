@@ -10,10 +10,13 @@
 package aero.sita.messaging.mercury.e2e.cucumber.typeb.steps;
 
 import aero.sita.messaging.mercury.e2e.cucumber.typeb.common.CommonTypeBWorld;
+import aero.sita.messaging.mercury.e2e.cucumber.typeb.common.ConfigurationWorld;
 import aero.sita.messaging.mercury.e2e.utilities.helper.MessageInjectionHelper;
 import io.cucumber.java.Before;
 import io.cucumber.java.en.Given;
 import io.cucumber.java.en.When;
+import java.util.List;
+import java.util.Map;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 
@@ -26,23 +29,41 @@ public class MessageInjectionSteps {
   @Autowired
   private CommonTypeBWorld commonWorld;
 
-  /**
-   * Reset the injection helper state before each scenario.
-   * Ensures that a forced queue from one scenario doesn't affect the next.
-   */
+  @Autowired
+  private ConfigurationWorld configurationWorld;
+
   @Before
   public void cleanInjectionState() {
     messageInjectionHelper.reset();
   }
 
   /**
-   * Generic step to select a target connection based on configuration properties.
-   * Replaces hardcoded queue/address steps.
-   * Example: Given I select the connection where "messageConfiguration.acceptMessagesWithAHeadingSection" is "true"
+   * Generic step to select a target connection based on the background configuration data.
+   * Queries the in-memory ConfigurationWorld instead of the actual DB.
    */
   @Given("I select the connection where {string} is {string}")
   public void selectConnectionByCriteria(String field, String value) {
-    messageInjectionHelper.setTargetQueueFromConfig(field, value);
+    log.info("Selecting connection from Background data where '{}' is '{}'", field, value);
+
+    List<Map<String, String>> connections = configurationWorld.getConnections();
+
+    if (connections == null || connections.isEmpty()) {
+      throw new IllegalStateException("No background connections data found. Ensure 'Given the \"configuration.connections\" collection contains...' is in the Background.");
+    }
+
+    // Find the connection map
+    Map<String, String> connectionMap = connections.stream()
+        .filter(row -> value.equalsIgnoreCase(row.get(field)))
+        .findFirst()
+        .orElseThrow(() -> new IllegalStateException(
+            String.format("No connection found in Background data where %s = %s", field, value)));
+
+    // Store the selected connection in the World for other steps to use
+    configurationWorld.setSelectedConnection(connectionMap);
+
+    // Set the target queue for injection
+    String foundQueue = connectionMap.get("inQueue"); // 'inQueue' in config = Test Harness OUT Queue
+    messageInjectionHelper.setForcedTargetQueue(foundQueue);
   }
 
   @When("I send the composed message via the Test Harness")

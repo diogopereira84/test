@@ -63,7 +63,7 @@ public class PollingProperties {
   @Data
   public static class MessageRetrievalConfig {
     private int timeoutSeconds = 10;
-    private long intervalMillis = 500;
+    private long intervalMillis = 1500;
   }
 
   @Data
@@ -81,7 +81,7 @@ public class PollingProperties {
   @Data
   public static class RejectMessageConfig {
     private int timeoutSeconds = 10;
-    private long intervalMillis = 500;
+    private long intervalMillis = 1500;
   }
 
   @Data
